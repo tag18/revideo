@@ -1,0 +1,1 @@
+Rive animation: https://rive.app/marketplace/699-1369-simple-loader/

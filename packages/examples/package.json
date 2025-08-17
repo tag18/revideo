@@ -9,7 +9,8 @@
   "dependencies": {
     "@revideo/2d": "*",
     "@revideo/core": "*",
-    "@revideo/ffmpeg": "*"
+    "@revideo/ffmpeg": "*",
+    "lottie-web": "^5.12.2"
   },
   "devDependencies": {
     "@revideo/ui": "*",

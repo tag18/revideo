@@ -27,6 +27,8 @@ export default defineConfig({
         './src/tweening-spring.ts',
         './src/tweening-save-restore.ts',
         './src/presentation.ts',
+        './src/camera-basic.ts',
+        './src/camera-multi.ts',
       ],
     }),
   ],

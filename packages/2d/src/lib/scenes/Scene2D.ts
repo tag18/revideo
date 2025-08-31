@@ -15,7 +15,8 @@ import {
   useLogger,
 } from '@revideo/core';
 import type {Node} from '../components';
-import {Audio, Media, Video, View2D} from '../components';
+import {Audio, Camera, Media, Video, View2D} from '../components';
+import {is} from '../utils';
 
 export class Scene2D extends GeneratorScene<View2D> implements Inspectable {
   private view: View2D | null = null;
@@ -120,7 +121,35 @@ export class Scene2D extends GeneratorScene<View2D> implements Inspectable {
     const node = this.getNode(element);
     if (node) {
       this.execute(() => {
-        node.drawOverlay(context, matrix.multiply(node.localToWorld()));
+        const cameras = this.getView().findAll(is(Camera));
+        const parentCameras = [];
+        for (const camera of cameras) {
+          const scene = camera.scene();
+          if (!scene) continue;
+
+          if (scene === node || scene.findFirst(n => n === node)) {
+            parentCameras.push(camera);
+          }
+        }
+
+        if (parentCameras.length > 0) {
+          for (const camera of parentCameras) {
+            const cameraParent = camera.parent();
+            const cameraParentToWorld = cameraParent ? cameraParent.localToWorld() : new DOMMatrix();
+            const cameraLocalToParent = camera.localToParent().inverse();
+            const nodeLocalToWorld = node.localToWorld();
+
+            node.drawOverlay(
+              context,
+              matrix
+                .multiply(cameraParentToWorld)
+                .multiply(cameraLocalToParent)
+                .multiply(nodeLocalToWorld),
+            );
+          }
+        } else {
+          node.drawOverlay(context, matrix.multiply(node.localToWorld()));
+        }
       });
     }
   }

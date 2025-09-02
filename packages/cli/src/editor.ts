@@ -1,7 +1,7 @@
 import motionCanvas from '@revideo/vite-plugin';
 import {createServer} from 'vite';
 
-export async function launchEditor(projectPath: string, port: string) {
+export async function launchEditor(projectPath: string, port: string, allowExternal?: boolean) {
   const server = await createServer({
     configFile: false,
     plugins: [
@@ -20,6 +20,10 @@ export async function launchEditor(projectPath: string, port: string) {
     },
     server: {
       port: parseInt(port),
+      fs: {
+        // let it load external files
+        strict: !allowExternal,
+      },
     },
   });
 

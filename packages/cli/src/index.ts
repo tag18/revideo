@@ -47,8 +47,9 @@ program
     './src/project.ts',
   )
   .option('--port <number>', 'Port on which to start the server', '9000')
+  .option('--allow-external', 'Allow loading external files', false)
   .action(async options => {
-    const editor = await launchEditor(options.projectFile, options.port);
+    const editor = await launchEditor(options.projectFile, options.port, options.allowExternal);
     console.log(`Editor running on port ${editor.config.server.port}`);
   });
 

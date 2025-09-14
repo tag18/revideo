@@ -34,7 +34,8 @@
     "eslint": "eslint \"**/*.ts?(x)\"",
     "eslint:fix": "eslint --fix \"**/*.ts?(x)\"",
     "prettier": "prettier --check .",
-    "prettier:fix": "prettier --write ."
+    "prettier:fix": "prettier --write .",
+    "build": "npx lerna run build"
   },
   "devDependencies": {
     "@commitlint/cli": "^19.4.0",

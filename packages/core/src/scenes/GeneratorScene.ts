@@ -161,7 +161,7 @@ export abstract class GeneratorScene<T>
       await DependencyContext.consumePromises();
       context.save();
       context.clearRect(0, 0, context.canvas.width, context.canvas.height);
-      await this.draw(context);
+      await this.execute(() => this.draw(context));
       context.restore();
     } while (DependencyContext.hasPromises() && iterations < 10);
 
@@ -355,17 +355,28 @@ export abstract class GeneratorScene<T>
    *
    * @param callback - The callback to invoke.
    */
-  protected execute<T>(callback: () => T): T {
-    let result: T;
+  protected execute<T>(callback: () => T): T;
+  protected async execute<T>(callback: () => Promise<T>): Promise<T>;
+  protected execute<T>(callback: () => T | Promise<T>): T | Promise<T> {
     startScene(this);
     startPlayback(this.playback);
+    
     try {
-      result = callback();
-    } finally {
+      const result = callback();
+      if (result instanceof Promise) {
+        return result.finally(() => {
+          endPlayback(this.playback);
+          endScene(this);
+        });
+      } else {
+        endPlayback(this.playback);
+        endScene(this);
+        return result;
+      }
+    } catch (error) {
       endPlayback(this.playback);
       endScene(this);
+      throw error;
     }
-
-    return result;
   }
 }

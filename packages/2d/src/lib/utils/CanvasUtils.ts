@@ -1,5 +1,5 @@
 import type {BBox, Spacing} from '@revideo/core';
-import {Color, Vector2} from '@revideo/core';
+import {Color, Vector2, BBox as BBoxConstructor} from '@revideo/core';
 import type {CanvasStyle, PossibleCanvasStyle} from '../partials';
 import {Gradient, Pattern} from '../partials';
 
@@ -200,20 +200,155 @@ export function drawImage(
   first: BBox,
   second?: BBox,
 ): void {
-  if (second) {
-    context.drawImage(
-      image,
-      first.x,
-      first.y,
-      first.width,
-      first.height,
-      second.x,
-      second.y,
-      second.width,
-      second.height,
-    );
-  } else {
-    context.drawImage(image, first.x, first.y, first.width, first.height);
+  // Save current Canvas rendering settings
+  const originalSmoothing = context.imageSmoothingEnabled;
+  const originalQuality = (context as any).imageSmoothingQuality;
+
+  try {
+    // Enable high-quality image rendering
+    context.imageSmoothingEnabled = true;
+    
+    // Set the highest quality image smoothing algorithm
+    if ('imageSmoothingQuality' in context) {
+      (context as any).imageSmoothingQuality = 'high';
+    }
+
+    // Detect if high-quality scaling processing is needed
+    const needsHighQualityScaling = (() => {
+      // Get image source dimensions
+      let imageWidth: number;
+      let imageHeight: number;
+      
+      if (image instanceof HTMLImageElement) {
+        imageWidth = image.naturalWidth || image.width;
+        imageHeight = image.naturalHeight || image.height;
+      } else if (image instanceof HTMLCanvasElement) {
+        imageWidth = image.width;
+        imageHeight = image.height;
+      } else if (image instanceof HTMLVideoElement) {
+        imageWidth = image.videoWidth || image.width;
+        imageHeight = image.videoHeight || image.height;
+      } else if (image instanceof ImageBitmap) {
+        imageWidth = image.width;
+        imageHeight = image.height;
+      } else {
+        // For other types (like VideoFrame), unable to determine dimensions, use standard rendering
+        return false;
+      }
+      
+      if (!imageWidth || !imageHeight) {
+        return false;
+      }
+      
+      const sourceWidth = second ? first.width : imageWidth;
+      const sourceHeight = second ? first.height : imageHeight;
+      const destWidth = second ? second.width : first.width;
+      const destHeight = second ? second.height : first.height;
+      
+      // If scale ratio is less than 0.5 (i.e., original image is compressed by more than half), use high-quality processing
+      const scaleX = destWidth / sourceWidth;
+      const scaleY = destHeight / sourceHeight;
+      const minScale = Math.min(scaleX, scaleY);
+      
+      return minScale < 0.5;
+    })();
+
+    if (needsHighQualityScaling) {
+      // High-quality scaling: use temporary Canvas for two-stage rendering
+      const tempCanvas = document.createElement('canvas');
+      const tempCtx = tempCanvas.getContext('2d');
+      
+      if (tempCtx) {
+        const destRect = second || first;
+        
+        // Get source region, use entire image if not specified
+        let sourceRect: BBox;
+        if (second) {
+          sourceRect = first;
+        } else {
+          // Use entire image as source region
+          if (image instanceof HTMLImageElement) {
+            sourceRect = new BBoxConstructor(0, 0, image.naturalWidth || image.width, image.naturalHeight || image.height);
+          } else if (image instanceof HTMLCanvasElement) {
+            sourceRect = new BBoxConstructor(0, 0, image.width, image.height);
+          } else if (image instanceof HTMLVideoElement) {
+            sourceRect = new BBoxConstructor(0, 0, image.videoWidth || image.width, image.videoHeight || image.height);
+          } else if (image instanceof ImageBitmap) {
+            sourceRect = new BBoxConstructor(0, 0, image.width, image.height);
+          } else {
+            // Fall back to standard rendering
+            sourceRect = new BBoxConstructor(0, 0, destRect.width, destRect.height);
+          }
+        }
+        
+        // Calculate intermediate rendering size (use 2-4x target size)
+        const devicePixelRatio = window.devicePixelRatio || 1;
+        const qualityMultiplier = Math.min(4, 2 * devicePixelRatio);
+        const intermediateWidth = destRect.width * qualityMultiplier;
+        const intermediateHeight = destRect.height * qualityMultiplier;
+        
+        // Set up temporary Canvas
+        tempCanvas.width = intermediateWidth;
+        tempCanvas.height = intermediateHeight;
+        
+        // First stage: high-resolution rendering to temporary Canvas
+        tempCtx.imageSmoothingEnabled = true;
+        if ('imageSmoothingQuality' in tempCtx) {
+          (tempCtx as any).imageSmoothingQuality = 'high';
+        }
+        
+        tempCtx.drawImage(
+          image,
+          sourceRect.x,
+          sourceRect.y,
+          sourceRect.width,
+          sourceRect.height,
+          0,
+          0,
+          intermediateWidth,
+          intermediateHeight
+        );
+        
+        // Second stage: draw from temporary Canvas to target (high-quality downsampling)
+        context.drawImage(
+          tempCanvas,
+          0,
+          0,
+          intermediateWidth,
+          intermediateHeight,
+          destRect.x,
+          destRect.y,
+          destRect.width,
+          destRect.height
+        );
+        
+        return;
+      }
+    }
+
+    // Standard rendering path (optimized quality settings)
+    if (second) {
+      context.drawImage(
+        image,
+        first.x,
+        first.y,
+        first.width,
+        first.height,
+        second.x,
+        second.y,
+        second.width,
+        second.height,
+      );
+    } else {
+      context.drawImage(image, first.x, first.y, first.width, first.height);
+    }
+    
+  } finally {
+    // Restore original rendering settings
+    context.imageSmoothingEnabled = originalSmoothing;
+    if ('imageSmoothingQuality' in context) {
+      (context as any).imageSmoothingQuality = originalQuality;
+    }
   }
 }
 

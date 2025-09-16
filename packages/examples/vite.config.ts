@@ -29,7 +29,6 @@ export default defineConfig({
         './src/presentation.ts',
         './src/camera-basic.ts',
         './src/camera-multi.ts',
-        './src/camera-scene.ts',
         './src/masked-animation.ts',
         './src/image-masked-text.ts',
         './src/explosive-text.ts',

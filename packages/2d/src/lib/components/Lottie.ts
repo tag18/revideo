@@ -10,6 +10,7 @@ export interface LottieProps extends RectProps {
   loop?: SignalValue<boolean>;
   autoplay?: SignalValue<boolean>;
   speed?: SignalValue<number>;
+  startFrame?: SignalValue<number>;
 }
 
 interface LottieInstance {
@@ -34,6 +35,10 @@ export class Lottie extends Rect {
   @initial(1)
   @signal()
   public declare readonly speed: SimpleSignal<number, this>;
+
+  @initial(0)
+  @signal()
+  public declare readonly startFrame: SimpleSignal<number, this>;
 
   @initial(0)
   @signal()
@@ -136,6 +141,7 @@ export class Lottie extends Rect {
       
       if (totalFrames && framerate) {
         const duration = totalFrames / framerate; // Animation total duration (seconds)
+        const startFrame = this.startFrame(); // Get the start frame
         let currentTime = this.currentTime * speed;
         
         // Handle looping
@@ -145,14 +151,14 @@ export class Lottie extends Rect {
           currentTime = Math.min(currentTime, duration);
         }
         
-        // Calculate target frame - using more precise calculation
+        // Calculate target frame - using more precise calculation with startFrame offset
         const progress = currentTime / duration;
-        const targetFrameFloat = progress * (totalFrames - 1); // Use totalFrames-1 to avoid overflow
-        const targetFrame = Math.max(0, Math.min(Math.round(targetFrameFloat), totalFrames - 1));
+        const targetFrameFloat = startFrame + (progress * (totalFrames - 1 - startFrame)); // Apply startFrame offset
+        const targetFrame = Math.max(startFrame, Math.min(Math.round(targetFrameFloat), totalFrames - 1));
         
         // Debug information (optional)
         if (speed < 1 && this.currentTime % 1 < 0.1) { // Print debug info occasionally during slow playback
-          console.debug(`Lottie Debug: speed=${speed}, currentTime=${this.currentTime.toFixed(2)}, progress=${progress.toFixed(3)}, targetFrame=${targetFrame}/${totalFrames}`);
+          console.debug(`Lottie Debug: speed=${speed}, startFrame=${startFrame}, currentTime=${this.currentTime.toFixed(2)}, progress=${progress.toFixed(3)}, targetFrame=${targetFrame}/${totalFrames}`);
         }
         
         // Clear canvas

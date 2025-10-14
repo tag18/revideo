@@ -13,7 +13,7 @@ export function SceneTrack() {
   return (
     <div className={styles.sceneTrack}>
       {scenes.map(scene => (
-        <SceneClip scene={scene} />
+        <SceneClip key={scene.name} scene={scene} />
       ))}
     </div>
   );

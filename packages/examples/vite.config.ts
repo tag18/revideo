@@ -38,6 +38,7 @@ export default defineConfig({
         './src/dropping-texts.ts',
         './src/strong-text.ts',
         './src/aurora-text.ts',
+        './src/time-events-basic.ts',
       ],
     }),
   ],

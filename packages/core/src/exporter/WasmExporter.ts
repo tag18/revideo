@@ -1,12 +1,18 @@
 import loadMp4Module from 'mp4-wasm';
 import type {Project} from '../app/Project';
 import type {AssetInfo, RendererSettings} from '../app/Renderer';
+import type {MetaField} from '../meta';
+import {ObjectMetaField} from '../meta';
 import type {Exporter} from './Exporter';
 import {download} from './download-videos';
 
 export class WasmExporter implements Exporter {
   public static readonly id = '@revideo/core/wasm';
   public static readonly displayName = 'Video (Wasm)';
+
+  public static meta(): MetaField<any> {
+    return new ObjectMetaField(this.displayName, {});
+  }
 
   public static async create(project: Project, settings: RendererSettings) {
     return new WasmExporter(project, settings);

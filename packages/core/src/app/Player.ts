@@ -4,6 +4,8 @@ import {
   ValueDispatcher,
 } from '../events';
 import type {Scene} from '../scenes';
+import {EditableTimeEvents} from '../scenes/timeEvents';
+import {createSceneMetadata} from '../scenes/SceneMetadata';
 import {clamp} from '../tweening';
 import {Vector2} from '../types';
 import {Semaphore} from '../utils';
@@ -144,15 +146,21 @@ export class Player {
 
     const scenes: Scene[] = [];
     for (const description of project.scenes) {
+      // Don't clone meta - use the original one that MetaFile is subscribed to
+      const meta = description.meta || createSceneMetadata();
+      console.log('[Player] Creating scene:', description.name, 'with meta:', meta);
       const scene = new description.klass({
         ...description,
         playback: this.status,
         logger: this.project.logger,
         size: this.size,
         resolutionScale: this.resolutionScale,
+        meta,
+        timeEventsClass: EditableTimeEvents,
         sharedWebGLContext: this.sharedWebGLContext,
         experimentalFeatures: project.experimentalFeatures,
       });
+      console.log('[Player] Scene created:', scene.name, 'timeEvents:', scene.timeEvents);
       scene.onReloaded.subscribe(() => this.requestRecalculation());
       scene.variables.updateSignals(project.variables ?? {});
       scenes.push(scene);

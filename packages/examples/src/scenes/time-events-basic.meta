@@ -1,0 +1,46 @@
+{
+  "version": 0,
+  "timeEvents": [
+    {
+      "name": "start",
+      "targetTime": 0.5
+    },
+    {
+      "name": "title-fade",
+      "targetTime": 1.0122865366996903
+    },
+    {
+      "name": "circle-animation",
+      "targetTime": 1.5422053252196437
+    },
+    {
+      "name": "circle-move",
+      "targetTime": 2.2041293796214467
+    },
+    {
+      "name": "rect-animation",
+      "targetTime": 2.663414905656058
+    },
+    {
+      "name": "rect-color-yellow",
+      "targetTime": 2.9313790218768685
+    },
+    {
+      "name": "rect-color-red",
+      "targetTime": 3.53548063217457
+    },
+    {
+      "name": "start-loop",
+      "targetTime": 3.576366048841237
+    },
+    {
+      "name": "stop-loop",
+      "targetTime": 3.902827123541909
+    },
+    {
+      "name": "final",
+      "targetTime": 3.976036096880436
+    }
+  ],
+  "seed": 700697793
+}

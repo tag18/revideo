@@ -20,6 +20,7 @@ export * from './math';
 export * from './range';
 export * from './Semaphore';
 export * from './useContext';
+export * from './useDuration';
 export * from './usePlayback';
 export * from './useScene';
 export * from './useThread';

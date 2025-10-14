@@ -9,6 +9,7 @@ export * from './Inspectable';
 export * from './LifecycleEvents';
 export * from './Random';
 export * from './Scene';
+export * from './SceneMetadata';
 export * from './SceneState';
 export * from './Shaders';
 export * from './Slides';

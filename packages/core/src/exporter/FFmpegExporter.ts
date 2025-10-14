@@ -5,6 +5,7 @@ import type {
   RendererSettings,
 } from '../app/Renderer';
 import {EventDispatcher} from '../events';
+import {EnumMetaField, type MetaField, ObjectMetaField} from '../meta';
 import type {Exporter} from './Exporter';
 import {download} from './download-videos';
 
@@ -45,6 +46,16 @@ export interface FfmpegExporterOptions {
 export class FFmpegExporterClient implements Exporter {
   public static readonly id = '@revideo/core/ffmpeg';
   public static readonly displayName = 'Video (FFmpeg)';
+
+  public static meta(project: Project): MetaField<any> {
+    return new ObjectMetaField(this.displayName, {
+      format: new EnumMetaField('format', [
+        {value: 'mp4', text: 'MP4'},
+        {value: 'webm', text: 'WebM'},
+        {value: 'proRes', text: 'ProRes'},
+      ]),
+    });
+  }
 
   private readonly settings: RendererSettings;
   private readonly exporterOptions: FfmpegExporterOptions;

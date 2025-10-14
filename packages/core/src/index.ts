@@ -4,6 +4,7 @@ export * from './events';
 export * from './exporter';
 export * from './flow';
 export * from './media';
+export * from './meta';
 export * from './plugin';
 export {default as DefaultPlugin} from './plugin/DefaultPlugin';
 export * from './scenes';

@@ -4,6 +4,7 @@ import type {
   RendererResult,
   RendererSettings,
 } from '../app/Renderer';
+import type {MetaField} from '../meta';
 
 /**
  * The static interface for exporters.
@@ -37,6 +38,11 @@ export interface ExporterClass {
    * @param settings - The rendering settings.
    */
   create(project: Project, settings: RendererSettings): Promise<Exporter>;
+
+  /**
+   * Create a meta field representing the options of this exporter.
+   */
+  meta(project: Project): MetaField<any>;
 }
 
 /**

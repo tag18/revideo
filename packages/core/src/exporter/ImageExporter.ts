@@ -2,6 +2,13 @@ import type {Logger} from '../app/Logger';
 import type {Project} from '../app/Project';
 import type {AssetInfo, RendererSettings} from '../app/Renderer';
 import {EventDispatcher} from '../events';
+import {
+  BoolMetaField,
+  EnumMetaField,
+  type MetaField,
+  NumberMetaField,
+  ObjectMetaField,
+} from '../meta';
 import {clamp} from '../tweening';
 import type {CanvasOutputMimeType} from '../types';
 import type {Exporter} from './Exporter';
@@ -9,6 +16,12 @@ import {download} from './download-videos';
 
 const EXPORT_FRAME_LIMIT = 256;
 const EXPORT_RETRY_DELAY = 1000;
+
+const FileTypes = [
+  {value: 'image/png' as CanvasOutputMimeType, text: 'PNG'},
+  {value: 'image/jpeg' as CanvasOutputMimeType, text: 'JPEG'},
+  {value: 'image/webp' as CanvasOutputMimeType, text: 'WebP'},
+];
 
 export interface ImageExporterOptions {
   quality: number;
@@ -28,6 +41,24 @@ interface ServerResponse {
 export class ImageExporter implements Exporter {
   public static readonly id = '@revideo/core/image-sequence';
   public static readonly displayName = 'Image sequence';
+
+  public static meta(): MetaField<any> {
+    const meta = new ObjectMetaField(this.displayName, {
+      fileType: new EnumMetaField('file type', FileTypes),
+      quality: new NumberMetaField('quality', 100)
+        .setRange(0, 100)
+        .describe('A number between 0 and 100 indicating the image quality.'),
+      groupByScene: new BoolMetaField('group by scene', false).describe(
+        'Group exported images by scene. When checked, separates the sequence into subdirectories for each scene in the project.',
+      ),
+    });
+
+    meta.fileType.onChanged.subscribe(value => {
+      meta.quality.disable(value === 'image/png');
+    });
+
+    return meta;
+  }
 
   public static async create(
     project: Project,

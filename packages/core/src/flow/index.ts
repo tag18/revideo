@@ -11,6 +11,7 @@ export * from './every';
 export * from './join';
 export * from './loop';
 export * from './loopFor';
+export * from './loopUntil';
 export * from './names';
 export * from './run';
 export * from './scheduling';

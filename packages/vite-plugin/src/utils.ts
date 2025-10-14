@@ -47,3 +47,13 @@ function getMeta(metaPath: string) {
     return JSON.parse(fs.readFileSync(metaPath, 'utf8'));
   }
 }
+
+export async function createMeta(metaPath: string) {
+  if (!fs.existsSync(metaPath)) {
+    await fs.promises.writeFile(
+      metaPath,
+      JSON.stringify({version: 0}, undefined, 2),
+      'utf8',
+    );
+  }
+}

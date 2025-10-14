@@ -7,6 +7,8 @@ import {
   type Exporter,
 } from '../exporter';
 import type {Scene} from '../scenes';
+import {createSceneMetadata} from '../scenes/SceneMetadata';
+import {ReadOnlyTimeEvents} from '../scenes/timeEvents';
 import {clampRemap} from '../tweening';
 import {Vector2} from '../types';
 import {Semaphore} from '../utils';
@@ -14,8 +16,8 @@ import {PlaybackManager, PlaybackState} from './PlaybackManager';
 import {PlaybackStatus} from './PlaybackStatus';
 import type {ExporterSettings, Project} from './Project';
 import {SharedWebGLContext} from './SharedWebGLContext';
-import type {StageSettings} from './Stage';
 import {Stage} from './Stage';
+import type {StageSettings} from './Stage';
 import {TimeEstimator} from './TimeEstimator';
 
 export interface RendererSettings extends StageSettings {
@@ -92,12 +94,15 @@ export class Renderer {
     const scenes: Scene[] = [];
 
     for (const description of project.scenes) {
+      const meta = description.meta ? description.meta.clone() : createSceneMetadata();
       const scene = new description.klass({
         ...description,
         playback: this.status,
         logger: this.project.logger,
         size: new Vector2(1920, 1080),
         resolutionScale: 1,
+        meta,
+        timeEventsClass: ReadOnlyTimeEvents,
         sharedWebGLContext: this.sharedWebGLContext,
         experimentalFeatures: project.experimentalFeatures,
       });

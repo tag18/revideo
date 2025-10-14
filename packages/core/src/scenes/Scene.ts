@@ -4,14 +4,20 @@ import type {
   PlaybackStatus,
   SharedWebGLContext,
 } from '../app';
-import type {SubscribableEvent, SubscribableValueEvent} from '../events';
+import type {
+  SubscribableEvent,
+  SubscribableValueEvent,
+  ValueDispatcher,
+} from '../events';
 import type {Plugin} from '../plugin';
 import type {SignalValue} from '../signals';
 import type {Vector2} from '../types';
 import type {LifecycleEvents} from './LifecycleEvents';
+import type {SceneMetadata} from './SceneMetadata';
 import type {Shaders} from './Shaders';
 import type {Slides} from './Slides';
 import type {Variables} from './Variables';
+import type {TimeEvents} from './timeEvents';
 
 /**
  * The constructor used when creating new scenes.
@@ -54,6 +60,7 @@ export interface SceneDescription<T = unknown> {
    * A list of plugins to include in the project.
    */
   plugins?: (Plugin | string)[];
+  meta: SceneMetadata;
 }
 
 /**
@@ -66,6 +73,8 @@ export interface FullSceneDescription<T = unknown> extends SceneDescription<T> {
   resolutionScale: number;
   playback: PlaybackStatus;
   logger: Logger;
+  onReplaced?: ValueDispatcher<FullSceneDescription<T>>;
+  timeEventsClass: new (scene: Scene) => TimeEvents;
   sharedWebGLContext: SharedWebGLContext;
   experimentalFeatures?: boolean;
 }
@@ -140,6 +149,8 @@ export interface Scene<T = unknown> {
    * Reference to the project.
    */
   readonly playback: PlaybackStatus;
+  readonly meta: SceneMetadata;
+  readonly timeEvents: TimeEvents;
   /**
    * @experimental
    */

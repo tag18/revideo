@@ -89,25 +89,39 @@ export default makeProject({
 ## Development Workflow
 
 ### Building & Running
+
+**IMPORTANT BUILD RULES:**
+- **Full project build**: `npm run build` in workspace root `/Users/xmbms/github/video.ai/revideo`
+- **Package-specific builds**: Only needed when modifying core packages
+  - `npm run core:build` - When modifying `packages/core`
+  - `npm run 2d:build` - When modifying `packages/2d` (editor, components, etc.)
+  - `npm run ui:build` - When modifying `packages/ui`
+- **Examples**: Modifying `packages/examples` (scenes, project files) does NOT require rebuild
+  - Just use `npm run examples:dev` for hot reload
+  - Only run `npm run examples:build` to check for TypeScript errors
+
 ```bash
-# Build specific package
-npm run core:build
-npm run 2d:build
+# Full project build (all packages)
+npm run build
 
-# Run all tests
-npm run test
+# Build specific package (only when modifying that package)
+npm run core:build     # Modified packages/core
+npm run 2d:build       # Modified packages/2d (Provider.tsx, components, etc.)
+npm run ui:build       # Modified packages/ui
 
-# Build examples with error checking
-npm run examples:build
-
-# Start development server (check if already running first)
-npm run examples:dev
+# Examples (no rebuild needed for scene changes)
+npm run examples:build  # Check TypeScript errors only
+npm run examples:dev    # Start dev server with hot reload
+npm run test           # Run all tests
 ```
 
 ### Development Process
 1. **Write Code**: Create scene and project files with proper structure
-2. **Compile Check**: Run `npm run examples:build` to check for TypeScript errors
-3. **Server Management**: 
+2. **Rebuild if needed**: 
+   - Modified core packages? → Run specific package build (e.g., `npm run 2d:build`)
+   - Modified examples only? → No rebuild needed, hot reload handles it
+3. **Compile Check**: Run `npm run examples:build` to check for TypeScript errors
+4. **Server Management**: 
    - Check if development server is already running (look for existing terminal processes)
    - Only start `npm run examples:dev` if not already running
    - User will check effects in browser after compilation succeeds
@@ -166,6 +180,10 @@ Unlike Motion Canvas, Revideo supports:
 14. **Language requirement**: ALWAYS use English for comments, documentation, and variable names
 15. **Server management**: Check if development server is running before attempting to start it
 16. **Development flow**: Write code → Build check → User tests in browser (don't auto-start server)
+17. **Build requirements**: 
+    - Modifying `packages/2d`, `packages/core`, or `packages/ui` requires running package-specific build (e.g., `npm run 2d:build`)
+    - Modifying `packages/examples` (scenes, project files) does NOT require rebuild - hot reload handles it automatically
+    - Use `npm run build` in workspace root only for full project rebuild
 
 ## Language and Documentation Standards
 

@@ -1,3 +1,15 @@
 {
-  "version": 0
+  "version": 0,
+  "timeEvents": [],
+  "seed": 2022198271,
+  "positionOverrides": [
+    {
+      "nodeKey": "media-image/Img[1]",
+      "position": {
+        "x": -379.2981571890414,
+        "y": 43.7986718416214
+      },
+      "timestamp": 1760614566016
+    }
+  ]
 }

@@ -5,6 +5,7 @@ import {NodeInspectorConfig} from './NodeInspectorConfig';
 import {PreviewOverlayConfig} from './PreviewOverlayConfig';
 import {Provider} from './Provider';
 import {SceneGraphTabConfig} from './SceneGraphTabConfig';
+import {VisualEditorInspectorConfig} from './VisualEditorInspectorConfig';
 
 export default makeEditorPlugin(() => {
   return {
@@ -12,6 +13,9 @@ export default makeEditorPlugin(() => {
     provider: Provider,
     previewOverlay: PreviewOverlayConfig,
     tabs: [SceneGraphTabConfig],
-    inspectors: [NodeInspectorConfig],
+    inspectors: [
+      NodeInspectorConfig,
+      VisualEditorInspectorConfig,
+    ],
   };
 });

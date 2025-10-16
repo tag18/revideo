@@ -42,5 +42,47 @@
       "targetTime": 3.976036096880436
     }
   ],
-  "seed": 700697793
+  "seed": 700697793,
+  "positionOverrides": [
+    {
+      "nodeKey": "time-events-basic/Circle[1]",
+      "position": {
+        "x": 32.4048748202622,
+        "y": 91.11882146447897
+      },
+      "timestamp": 1760613621580
+    },
+    {
+      "nodeKey": "time-events-basic/Rect[1]",
+      "position": {
+        "x": 422.97572056390345,
+        "y": 204.352325912565
+      },
+      "timestamp": 1760588288926
+    },
+    {
+      "nodeKey": "time-events-basic/TxtLeaf[1]",
+      "position": {
+        "x": -298.1088578235358,
+        "y": 230.5444293860346
+      },
+      "timestamp": 1760616129226
+    },
+    {
+      "nodeKey": "time-events-basic/Txt[1]",
+      "position": {
+        "x": -419.4884157255292,
+        "y": -260.10007356852293
+      },
+      "timestamp": 1760616255259
+    },
+    {
+      "nodeKey": "time-events-basic/Txt[2]",
+      "position": {
+        "x": -308.60228961892426,
+        "y": 45.226938696578145
+      },
+      "timestamp": 1760616262925
+    }
+  ]
 }

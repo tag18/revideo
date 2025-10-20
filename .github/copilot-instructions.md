@@ -70,8 +70,8 @@ export default makeProject({
 ```
 
 ### Animation Patterns
-- **`yield*`**: Blocks until animation completes, produces multiple frames
-- **`yield`**: Single operations, awaits promises, doesn't produce frames unless falsy
+- **`yield*`**: Delegates to another generator, produces multiple frames
+- **`yield`**: Returns a single value (Promise or otherwise), pauses execution
 - **`createRef<ComponentType>()`**: Get component references for animation
 - **`tween(duration, callback)`**: Core animation primitive - always use with `yield*`
 - **`all(...animations)`**: Run animations in parallel - always use with `yield*`
@@ -79,6 +79,131 @@ export default makeProject({
 - **`loop(count, animation)`**: Finite loops - use `yield*` for frame production
 - **`waitFor(seconds)`**: Time delays - always use with `yield*`
 - **Scene persistence**: Always end scenes with `yield* waitFor(duration)` to keep animations visible
+
+### Understanding `yield` vs `yield*` vs no yield
+
+#### When does a frame get rendered?
+A common misconception is that every `yield` corresponds to a frame. In reality:
+- **Frames are only rendered when the yielded value is falsy** (undefined, null, false, etc.)
+- **Non-falsy values (Promises, objects) don't render frames** - they're awaited/processed first
+
+**Frame rendering logic (simplified):**
+```typescript
+let result = scene.next();
+
+// We don't draw a frame while the yield is not empty
+while (result.value) {
+  if (isPromise(result.value)) {
+    result = await result.value;
+  } else {
+    console.warn('Invalid value yielded by the scene.');
+  }
+  result = scene.next();
+}
+
+// When result is empty (while loop passed), we render a frame
+drawFrame();
+```
+
+#### `yield` - Single operations, awaits promises
+Use `yield` to:
+- **Await promises** from async operations (image loading, font loading, etc.)
+- **Pause execution** without producing a frame (unless value is falsy)
+- **Return a single value** to the generator
+
+```tsx
+// ✅ yield view.add() - Awaits any promises from component construction
+yield view.add(<Img src={'img.png'} />);  // Awaits image load, NO frame rendered
+
+// ✅ yield Promise - Awaits async operations
+const data = yield fetch('api/data');  // Awaits fetch, NO frame rendered
+
+// ✅ Empty yield - Renders ONE frame
+yield;  // Falsy value → renders a frame
+
+// Example: 30 frames (1 second at 30fps)
+for (let i = 0; i < 30; i++) {
+  yield;  // Each empty yield = 1 frame
+}
+```
+
+#### `yield*` - Generator delegation, produces multiple frames
+Use `yield*` to:
+- **Delegate to another generator function** that produces multiple frames
+- **Run time-based animations** (tween, waitFor, all)
+- **Execute sequences** of frame-producing operations
+
+```tsx
+// ✅ yield* waitFor() - Produces multiple frames over time
+yield* waitFor(1);  // Produces 30 frames (1 second at 30fps)
+
+// ✅ yield* tween() - Produces frames during animation
+yield* tween(2, value => {
+  circle().scale(1 + value);
+});  // Produces 60 frames (2 seconds)
+
+// ✅ yield* all() - Parallel animations
+yield* all(
+  tween(1, value => circle().x(value * 100)),
+  tween(1, value => text().opacity(value)),
+);  // Produces frames for both animations
+
+// This is equivalent to:
+yield* waitFor(1);
+// vs manually:
+for (let i = 0; i < 30; i++) {
+  yield;  // 30 empty yields = 30 frames
+}
+```
+
+#### No yield - Immediate execution, no waiting
+Use direct calls (no yield) when:
+- **Adding components** without external dependencies (no images, fonts, etc.)
+- **Setting properties** synchronously
+- **Performing calculations** that don't need waiting
+
+```tsx
+// ✅ No yield - Simple component addition
+view.add(
+  <Circle size={100} fill="#ff0000" />
+);  // No async operations, no yield needed
+
+// ✅ No yield - Setting properties
+circle().fill('#00ff00');
+circle().position([100, 200]);
+
+// ⚠️ But if loading external resources, use yield:
+yield view.add(<Img src="external.png" />);  // Has async image loading
+yield view.add(<Txt fontFamily="CustomFont">Text</Txt>);  // May need font loading
+```
+
+#### Official Recommendation: "yield every add call"
+From Revideo docs:
+> "Adding a **yield** in front of an operation ensures that Revideo awaits any promises associated with that operation, such as network requests or awaiting fonts to load. If you want to be safe, you can simply **yield every add call** - this is a good catch-all and won't cause problems."
+
+**Example:**
+```tsx
+// ✅ Safe approach: Always yield view.add()
+yield view.add(
+  <>
+    <Txt>Text might need font loading</Txt>
+    <Img src="image.png" />
+    <Circle />
+  </>
+);
+
+// If you don't yield and there are async operations:
+// ⚠️ Warning: "Tried to access an asynchronous property before the node was ready"
+```
+
+#### Summary Table
+
+| Syntax | Use Case | Produces Frames? | Example |
+|--------|----------|------------------|---------|
+| `yield` | Await promises, single operations | Only if value is falsy | `yield view.add(<Img/>)` |
+| `yield*` | Delegate to generators, animations | Yes, multiple frames | `yield* waitFor(1)` |
+| No yield | Synchronous operations | No | `view.add(<Circle/>)` |
+| Empty `yield` | Single frame | Yes, exactly 1 frame | `yield;` |
 
 ### Component Styling
 - Use **signal functions** for dynamic properties: `fill={() => someSignal()}`

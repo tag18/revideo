@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "baseUrl": ".",
+    "rootDir": ".",
     "outDir": "../lib/client",
     "inlineSourceMap": true,
     "noImplicitAny": true,

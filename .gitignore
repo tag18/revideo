@@ -16,3 +16,14 @@ tsconfig.tsbuildinfo
 id.txt
 
 .nx
+
+# TypeScript compilation artifacts in source directories
+/packages/*/client/**/*.js
+/packages/*/client/**/*.d.ts
+/packages/*/client/**/*.d.ts.map
+/packages/*/server/**/*.js
+/packages/*/server/**/*.d.ts
+/packages/*/server/**/*.d.ts.map
+# But keep TypeScript source files
+!/packages/*/client/**/*.ts
+!/packages/*/server/**/*.ts

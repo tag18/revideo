@@ -1,7 +1,10 @@
 import {Audio} from '@revideo/2d';
 import type {MediaProps} from '@revideo/2d/lib/components/Media';
 import {DependencyContext, type SimpleSignal, type SignalValue, useScene} from '@revideo/core';
+import {waitFor} from '@revideo/core/lib/flow';
 import {computed, initial, signal} from '@revideo/2d/lib/decorators';
+import {VoiceoverTracker} from './VoiceoverTracker';
+import type {WordBoundary} from '../types';
 
 export interface TTSAudioProps extends Omit<MediaProps, 'src'> {
   text: SignalValue<string>;
@@ -28,7 +31,11 @@ export interface ProjectTTSDefaults {
  * Acts like a regular Audio component but generates speech from text using TTS
  */
 export class TTSAudio extends Audio {
-  private static readonly ttsGenerationPromises: Record<string, Promise<string>> = {};
+  private static readonly ttsGenerationPromises: Record<string, Promise<{audioPath: string; wordBoundaries: WordBoundary[]; duration: number}>> = {};
+  private static readonly ttsTrackerCache: Record<string, VoiceoverTracker> = {};
+  
+  // Voiceover tracker for duration and bookmark management
+  private _tracker: VoiceoverTracker = new VoiceoverTracker();
   
   // ⚠️ CRITICAL FIX: Override mediaElement to return cachedAudioNode directly
   // The @computed() decorator on Audio.audio() causes it to return the parent's 
@@ -122,7 +129,7 @@ export class TTSAudio extends Audio {
     }
   }
 
-  private static async generateTTSStatic(text: string, voice: string, rate: string, pitch: string): Promise<string> {
+  private static async generateTTSStatic(text: string, voice: string, rate: string, pitch: string): Promise<{audioPath: string; wordBoundaries: WordBoundary[]; duration: number}> {
     // Validate inputs
     if (!text || typeof text !== 'string') {
       throw new Error(`Invalid text parameter: ${text}`);
@@ -164,12 +171,17 @@ export class TTSAudio extends Audio {
 
     const result = await response.json();
     console.log('🔗 TTSAudio generated audioPath:', result.audioPath);
+    console.log('📍 Word boundaries received:', result.wordBoundaries?.length || 0);
     
     if (!result.success || !result.audioPath) {
       throw new Error(`TTS generation failed: ${result.error || 'Unknown error'}`);
     }
     
-    return result.audioPath;
+    return {
+      audioPath: result.audioPath,
+      wordBoundaries: result.wordBoundaries || [],
+      duration: result.duration || 0
+    };
   }
 
   private cachedAudioNode?: HTMLAudioElement;
@@ -256,17 +268,26 @@ export class TTSAudio extends Audio {
       
       // Create complete Promise chain
       this.currentGenerationPromise = TTSAudio.ttsGenerationPromises[ttsKey]
-        .then(audioPath => {
+        .then(result => {
           if (!this.cachedAudioNode || this.currentTtsKey !== ttsKey) {
-            return audioPath;
+            return result.audioPath;
           }
           
-          console.log('✅ TTSAudio: TTS generated, setting src:', audioPath);
+          console.log('✅ TTSAudio: TTS generated, setting src:', result.audioPath);
+          console.log('📍 Word boundaries:', result.wordBoundaries.length);
+          
+          // Update tracker with duration and word boundaries
+          this._tracker.setDuration(result.duration);
+          this._tracker.setWordBoundaries(result.wordBoundaries);
+          this._tracker.processBookmarks(textValue);
+          
+          // Cache tracker for reuse
+          TTSAudio.ttsTrackerCache[ttsKey] = this._tracker;
           
           // ⚠️ Critical: Update Media's src signal, not just the DOM's src
-          this.src(audioPath);
+          this.src(result.audioPath);
           
-          this.cachedAudioNode.src = audioPath;
+          this.cachedAudioNode.src = result.audioPath;
           this.cachedAudioNode.load();
           
           console.log('🔍 DEBUG: After setting src, signal value:', this.src());
@@ -278,7 +299,7 @@ export class TTSAudio extends Audio {
               console.log('🔍 DEBUG: cachedAudioNode:', this.cachedAudioNode);
               console.log('🔍 DEBUG: cachedAudioNode.src:', this.cachedAudioNode!.src);
               console.log('🔍 DEBUG: cachedAudioNode.readyState:', this.cachedAudioNode!.readyState);
-              resolve(audioPath);
+              resolve(result.audioPath);
             }, { once: true });
           });
         })
@@ -373,17 +394,22 @@ export class TTSAudio extends Audio {
 
     // Create Promise chain
     this.currentGenerationPromise = TTSAudio.ttsGenerationPromises[ttsKey]
-      .then(audioPath => {
+      .then(result => {
         if (!this.cachedAudioNode || this.currentTtsKey !== ttsKey) {
-          return audioPath;
+          return result.audioPath;
         }
         
-        console.log('🔄 TTSAudio: Parameter changed, setting new src:', audioPath);
+        console.log('🔄 TTSAudio: Parameter changed, setting new src:', result.audioPath);
+        
+        // Update tracker
+        this._tracker.setDuration(result.duration);
+        this._tracker.setWordBoundaries(result.wordBoundaries);
+        this._tracker.processBookmarks(textValue);
         
         // ⚠️ Critical: Update Media's src signal
-        this.src(audioPath);
+        this.src(result.audioPath);
         
-        this.cachedAudioNode.src = audioPath;
+        this.cachedAudioNode.src = result.audioPath;
         this.cachedAudioNode.load();
         
         return new Promise<string>((resolve, reject) => {
@@ -391,7 +417,7 @@ export class TTSAudio extends Audio {
             console.log('✅ TTSAudio: Regenerated audio ready');
             this.cachedAudioNode?.removeEventListener('canplay', canPlayHandler);
             this.cachedAudioNode?.removeEventListener('error', errorHandler);
-            resolve(audioPath);
+            resolve(result.audioPath);
           };
           
           const errorHandler = (e: Event) => {
@@ -401,7 +427,7 @@ export class TTSAudio extends Audio {
           };
           
           if (this.cachedAudioNode && this.cachedAudioNode.readyState >= 2) {
-            resolve(audioPath);
+            resolve(result.audioPath);
           } else {
             this.cachedAudioNode?.addEventListener('canplay', canPlayHandler);
             this.cachedAudioNode?.addEventListener('error', errorHandler);
@@ -475,5 +501,160 @@ export class TTSAudio extends Audio {
     }
     
     return 'generating';
+  }
+
+  /**
+   * Override play() to automatically set tracker start time
+   */
+  public override play() {
+    // Set start time on tracker when play is called
+    if (this._tracker) {
+      this._tracker.setStartTime(this.time());
+    }
+    super.play();
+  }
+
+  /**
+   * Get voiceover tracker for duration and bookmark control
+   * Inspired by Manim-Voiceover's tracker system
+   * 
+   * @returns VoiceoverTracker instance
+   * 
+   * @example
+   * ```typescript
+   * const ttsAudio = <TTSAudio 
+   *   text="Hello <bookmark mark='A'/> world <bookmark mark='B'/> everyone"
+   * />;
+   * 
+   * // Get tracker for duration control
+   * const tracker = ttsAudio.getTracker();
+   * 
+   * // Use in animations
+   * yield* ttsAudio.play();
+   * yield* waitFor(tracker.timeUntilBookmark('A'));
+   * // Trigger animation at bookmark A
+   * ```
+   */
+  public getTracker(): VoiceoverTracker {
+    // Set time getter if not already set
+    if (!this._tracker['_timeGetter']) {
+      this._tracker.setTimeGetter(() => this.time());
+    }
+    return this._tracker;
+  }
+
+  /**
+   * Play audio and ensure it completes when the block finishes
+   * This mimics Manim-Voiceover's context manager pattern
+   * 
+   * Equivalent to Manim-Voiceover's:
+   * ```python
+   * with self.voiceover(text="...") as tracker:
+   *     self.play(Circle().animate.scale(2), run_time=tracker.duration)
+   * # Audio finishes exactly when this block ends
+   * ```
+   * 
+   * @returns Generator that yields tracker and waits for remaining audio at the end
+   * 
+   * @example
+   * ```typescript
+   * // Method 1: Automatic synchronization
+   * yield* ttsAudio().playUntilDone(function*(tracker) {
+   *   // Any animations here
+   *   yield* circle().size(300, 1.5);  // Takes 1.5s
+   *   yield* rect().fill('#ff0000', 1.0);  // Takes 1.0s
+   *   // After all animations (2.5s), waits for remaining audio time
+   * });
+   * 
+   * // Method 2: Manual duration matching
+   * const tracker = ttsAudio().getTracker();
+   * yield* all(
+   *   ttsAudio().play(),
+   *   circle().size(300, tracker.duration)  // Matches audio duration exactly
+   * );
+   * ```
+   */
+  public *playUntilDone(animationBlock?: (tracker: VoiceoverTracker) => Generator<any>) {
+    const tracker = this.getTracker();
+    const startTime = this.time();
+    
+    // Set start time on tracker for elapsedTime/remainingTime calculations
+    tracker.setStartTime(startTime);
+    
+    // Start playing audio
+    this.play();
+    
+    if (animationBlock) {
+      // Execute the animation block
+      yield* animationBlock(tracker);
+      
+      // Use tracker's remainingTime for consistency
+      const remaining = tracker.remainingTime;
+      
+      if (remaining > 0) {
+        yield* waitFor(remaining);
+      }
+    } else {
+      // No animation block, just wait for full duration
+      yield* waitFor(tracker.duration);
+    }
+  }
+
+  /**
+   * Play audio until a specific bookmark is reached
+   * 
+   * @param mark - The bookmark mark to play until
+   * @returns Generator that plays audio and waits until bookmark
+   * 
+   * @example
+   * ```typescript
+   * // Play audio until bookmark 'A', then start animation
+   * yield* ttsAudio().playUntilBookmark('A');
+   * yield* circle().scale(1.5, 0.5);  // Animation starts at bookmark A
+   * ```
+   */
+  public *playUntilBookmark(mark: string) {
+    const tracker = this.getTracker();
+    const startTime = this.time();
+    tracker.setStartTime(startTime);
+    
+    // Start playing audio
+    this.play();
+    
+    // Wait until bookmark
+    const timeUntil = tracker.bookmark(mark);
+    if (timeUntil > 0) {
+      yield* waitFor(timeUntil);
+    }
+  }
+
+  /**
+   * Wait for a specific bookmark to be reached (audio should already be playing)
+   * 
+   * @param mark - The bookmark mark to wait for
+   * @returns Generator that waits until bookmark
+   * 
+   * @example
+   * ```typescript
+   * // Start playing audio
+   * ttsAudio().play();
+   * const tracker = ttsAudio().getTracker();
+   * tracker.setStartTime(this.time());
+   * 
+   * // Wait for bookmark A, then trigger animation
+   * yield* ttsAudio().waitForBookmark('A');
+   * yield* circle1().scale(1.2, 0.5);
+   * 
+   * // Wait for bookmark B, then trigger another animation
+   * yield* ttsAudio().waitForBookmark('B');
+   * yield* circle2().scale(1.2, 0.5);
+   * ```
+   */
+  public *waitForBookmark(mark: string) {
+    const tracker = this.getTracker();
+    const timeUntil = tracker.bookmark(mark);
+    if (timeUntil > 0) {
+      yield* waitFor(timeUntil);
+    }
   }
 }

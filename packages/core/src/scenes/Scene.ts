@@ -18,6 +18,7 @@ import type {Shaders} from './Shaders';
 import type {Slides} from './Slides';
 import type {Variables} from './Variables';
 import type {TimeEvents} from './timeEvents';
+import type {Bookmarks} from './bookmarks';
 
 /**
  * The constructor used when creating new scenes.
@@ -151,6 +152,7 @@ export interface Scene<T = unknown> {
   readonly playback: PlaybackStatus;
   readonly meta: SceneMetadata;
   readonly timeEvents: TimeEvents;
+  readonly bookmarks: Bookmarks;
   /**
    * @experimental
    */

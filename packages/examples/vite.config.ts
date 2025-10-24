@@ -39,6 +39,7 @@ export default defineConfig({
         './src/strong-text.ts',
         './src/aurora-text.ts',
         './src/time-events-basic.ts',
+        './src/bookmark-demo.ts',
       ],
     }),
   ],

@@ -173,6 +173,63 @@
   padding: 4px 0;
 }
 
+.bookmarkTrack {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 32px;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.bookmarkMarker {
+  position: absolute;
+  cursor: pointer;
+  pointer-events: all;
+  z-index: 10;
+  
+  &:hover {
+    z-index: 15;
+  }
+}
+
+.bookmarkMarkerLine {
+  position: absolute;
+  width: 3px;
+  height: 32px;
+  background-color: var(--bookmark-color, #FFA726);
+  opacity: 0.8;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.5);
+  
+  .bookmarkMarker:hover & {
+    width: 4px;
+    opacity: 1;
+    box-shadow: 0 0 8px rgba(0, 0, 0, 0.7);
+  }
+}
+
+.bookmarkMarkerLabel {
+  position: absolute;
+  left: 8px;
+  top: 6px;
+  padding: 3px 8px;
+  background-color: var(--bookmark-color, #FFA726);
+  color: rgba(0, 0, 0, 0.87);
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  z-index: 20;
+  
+  .bookmarkMarker:hover & {
+    opacity: 1;
+  }
+}
+
 .labelClip {
   position: absolute;
   height: 32px;

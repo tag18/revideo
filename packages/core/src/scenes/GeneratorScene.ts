@@ -23,6 +23,7 @@ import {Slides} from './Slides';
 import type {Threadable} from './Threadable';
 import {Variables} from './Variables';
 import type {TimeEvents} from './timeEvents';
+import {Bookmarks} from './bookmarks';
 
 export interface ThreadGeneratorFactory<T> {
   (view: T): ThreadGenerator;
@@ -41,6 +42,7 @@ export abstract class GeneratorScene<T>
   public readonly logger: Logger;
   public readonly meta: SceneMetadata;
   public readonly timeEvents: TimeEvents;
+  public readonly bookmarks: Bookmarks;
   public readonly shaders: Shaders;
   public readonly slides: Slides;
   public readonly variables: Variables;
@@ -141,6 +143,7 @@ export abstract class GeneratorScene<T>
 
     decorate(this.runnerFactory, threadable(this.name));
     this.timeEvents = new description.timeEventsClass(this);
+    this.bookmarks = new Bookmarks(this.logger);
     this.variables = new Variables(this);
     this.shaders = new Shaders(this, description.sharedWebGLContext);
     this.slides = new Slides(this);

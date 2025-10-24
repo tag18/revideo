@@ -16,7 +16,8 @@ export interface MediaProps extends RectProps {
   loop?: SignalValue<boolean>;
   playbackRate?: number;
   volume?: number;
-  time?: SignalValue<number>;
+  startTime?: SignalValue<number>;
+  endTime?: SignalValue<number>;
   play?: boolean;
   awaitCanPlay?: SignalValue<boolean>;
   allowVolumeAmplificationInPreview?: SignalValue<boolean>;
@@ -58,6 +59,14 @@ export abstract class Media extends Rect {
   @initial(1)
   @signal()
   public declare readonly playbackRate: SimpleSignal<number, this>;
+
+  @initial(0)
+  @signal()
+  protected declare readonly startTime: SimpleSignal<number, this>;
+
+  @initial(Infinity)
+  @signal()
+  protected declare readonly endTime: SimpleSignal<number, this>;
 
   @initial(0)
   @signal()
@@ -295,7 +304,7 @@ export abstract class Media extends Rect {
   public play() {
     const time = useThread().time;
     const start = time();
-    const offset = this.time();
+    const offset = this.time() || this.startTime();
     const playbackRate = this.playbackRate();
     this.playing(true);
     this.time(() => this.clampTime(offset + (time() - start) * playbackRate));
@@ -309,10 +318,22 @@ export abstract class Media extends Rect {
 
   public clampTime(time: number): number {
     const duration = this.getDuration();
-    if (this.loop()) {
-      time %= duration;
+    const startTime = this.startTime();
+
+    // Support negative endTime (e.g., -5 means duration - 5)
+    let endTime = this.endTime();
+    if (endTime < 0) {
+      endTime = duration + endTime;
     }
-    return clamp(0, duration, time);
+    endTime = Math.min(endTime, duration);
+
+    const effectiveDuration = endTime - startTime;
+
+    if (this.loop()) {
+      // Loop within the startTime-endTime range
+      time = ((time - startTime) % effectiveDuration) + startTime;
+    }
+    return clamp(startTime, endTime, time);
   }
 
   protected override collectAsyncResources() {

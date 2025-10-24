@@ -35,6 +35,9 @@ export class Audio extends Media {
       Audio.pool[key] = audio;
     }
 
+    // Sync loop property to native HTML Audio element
+    audio.loop = this.loop();
+
     const weNeedToWait = this.waitForCanPlayNecessary(audio);
     if (!weNeedToWait) {
       return audio;
@@ -52,14 +55,33 @@ export class Audio extends Media {
   @computed()
   protected seekedAudio(): HTMLAudioElement {
     const audio = this.audio();
+    const duration = audio.duration;
+    
+    // Support negative endTime (e.g., -5 means duration - 5)
+    let endTime = this.endTime();
+    if (endTime < 0) {
+      endTime = duration + endTime;
+    }
+    endTime = Math.min(endTime, duration);
+    
+    const startTime = this.startTime();
 
+    // Only pause on 'ended' if loop is disabled
     audio.addEventListener('ended', () => {
-      this.pause();
+      if (!this.loop()) {
+        this.pause();
+      }
     });
 
-    if (!(this.time() < audio.duration)) {
-      this.pause();
-      return audio;
+    // Check if current time exceeds endTime
+    if (!(this.time() < endTime)) {
+      if (this.loop()) {
+        // Loop back to startTime
+        this.time(startTime);
+      } else {
+        this.pause();
+        return audio;
+      }
     }
 
     const time = this.clampTime(this.time());
@@ -81,10 +103,26 @@ export class Audio extends Media {
   @computed()
   protected fastSeekedAudio(): HTMLAudioElement {
     const audio = this.audio();
+    const duration = audio.duration;
+    
+    // Support negative endTime (e.g., -5 means duration - 5)
+    let endTime = this.endTime();
+    if (endTime < 0) {
+      endTime = duration + endTime;
+    }
+    endTime = Math.min(endTime, duration);
+    
+    const startTime = this.startTime();
 
-    if (!(this.time() < audio.duration)) {
-      this.pause();
-      return audio;
+    // Check if current time exceeds endTime
+    if (!(this.time() < endTime)) {
+      if (this.loop()) {
+        // Loop back to startTime
+        this.time(startTime);
+      } else {
+        this.pause();
+        return audio;
+      }
     }
 
     const time = this.clampTime(this.time());
@@ -96,7 +134,7 @@ export class Audio extends Media {
     }
 
     const playing =
-      this.playing() && time < audio.duration && audio.playbackRate > 0;
+      this.playing() && time < endTime && audio.playbackRate > 0;
     if (playing) {
       if (audio.paused) {
         DependencyContext.collectPromise(audio.play());

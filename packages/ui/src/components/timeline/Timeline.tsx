@@ -179,6 +179,14 @@ export function Timeline() {
 
   return (
     <TimelineContextProvider state={state}>
+      {!isReady && (
+        <div className={styles.timelineProgress}>
+          <div className={styles.progressText}>⏳ Calculating Timeline...</div>
+          <div className={styles.progressBar}>
+            <div className={styles.progressBarInner}></div>
+          </div>
+        </div>
+      )}
       <div ref={hoverRef} className={clsx(styles.root, isReady && styles.show)}>
         <div
           className={styles.timelineWrapper}

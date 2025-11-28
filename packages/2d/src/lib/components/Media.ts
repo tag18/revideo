@@ -162,11 +162,38 @@ export abstract class Media extends Rect {
     if (media.seeking) {
       DependencyContext.collectPromise(
         new Promise<void>(resolve => {
-          const listener = () => {
-            resolve();
-            media.removeEventListener('seeked', listener);
+          let resolved = false;
+          
+          const cleanup = () => {
+            media.removeEventListener('seeked', onSeeked);
+            media.removeEventListener('error', onError);
           };
-          media.addEventListener('seeked', listener);
+          
+          const onSeeked = () => {
+            if (!resolved) {
+              resolved = true;
+              cleanup();
+              resolve();
+            }
+          };
+          
+          const onError = () => {
+            if (!resolved) {
+              resolved = true;
+              const errorCode = media.error?.code;
+              const errorMessage = this.getErrorReason(errorCode);
+              useLogger().error({
+                message: `Media seek failed`,
+                remarks: `Media "${this.key}" (src: ${this.src()}) failed to seek to ${value}s. Error: ${errorMessage}`,
+                inspect: this.key,
+              });
+              cleanup();
+              resolve();
+            }
+          };
+          
+          media.addEventListener('seeked', onSeeked);
+          media.addEventListener('error', onError);
         }),
       );
     }
@@ -279,7 +306,22 @@ export abstract class Media extends Rect {
 
     const onError = () => {
       const reason = this.getErrorReason(media.error?.code);
-      console.log(`ERROR: Error loading video: ${this.src()}, ${reason}`);
+      const srcSignal = this.src();
+      const mediaSrc = media.src;
+      const nodeKey = this.key;
+      const nodeName = this.constructor.name;
+      console.error(`
+================== MEDIA LOAD ERROR ==================
+Component: ${nodeName}
+Key: ${nodeKey}
+src() signal value: ${srcSignal}
+media.src DOM value: ${mediaSrc}
+Error code: ${media.error?.code}
+Reason: ${reason}
+Stack trace:
+${new Error().stack}
+======================================================
+      `.trim());
       media.removeEventListener('error', onError);
     };
 

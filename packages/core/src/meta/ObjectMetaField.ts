@@ -75,13 +75,6 @@ class ObjectMetaFieldInternal<
       ...this.customFields,
     };
     
-    console.log('[ObjectMetaField] serialize:', {
-      name: this.name,
-      transformed,
-      customFields: this.customFields,
-      result,
-    });
-    
     return result;
   }
 
@@ -105,23 +98,9 @@ class ObjectMetaFieldInternal<
       ...this.customFields,
     };
     
-    console.log('[ObjectMetaField] handleChange:', {
-      name: this.name,
-      hasValue: !!this.value,
-      valueType: this.value?.constructor?.name,
-      valueHasCurrent: 'current' in (this.value || {}),
-      valueHasSetCurrent: Object.getOwnPropertyDescriptor(Object.getPrototypeOf(this.value || {}), 'current')?.set !== undefined,
-    });
-    
-    console.log('[ObjectMetaField] About to set value.current');
     this.value.current = newValue;
-    console.log('[ObjectMetaField] After setting value.current');
     
     // Notify onFieldsChanged subscribers when nested fields change
-    console.log('[ObjectMetaField] Triggering onFieldsChanged event', {
-      eventInstanceId: (this.event as any)._instanceId,
-      eventSubCount: (this.event as any).subscribers?.size || 0,
-    });
     this.event.current = [...this.fields.values()];
   };
 

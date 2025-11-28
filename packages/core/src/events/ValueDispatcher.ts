@@ -47,15 +47,8 @@ export class ValueDispatcher<T> extends EventDispatcherBase<T> {
    * @param value - The new value.
    */
   public set current(value: T) {
-    console.log('[ValueDispatcher] set current called!', {
-      debugName: (this as any)._debugName,
-      subCount: (this as any).subscribers?.size || 0,
-    });
-    
     this.value = value;
-    const result = this.notifySubscribers(value);
-    
-    console.log('[ValueDispatcher] notifySubscribers returned:', result.length);
+    this.notifySubscribers(value);
   }
 
   /**

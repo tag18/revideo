@@ -107,6 +107,15 @@ export class Video extends Media {
   @computed()
   private video(): HTMLVideoElement {
     const src = this.src();
+    
+    // Guard against undefined src - don't try to load anything
+    if (!src) {
+      // Return a placeholder video element that won't trigger network requests
+      const placeholder = document.createElement('video');
+      placeholder.crossOrigin = 'anonymous';
+      return placeholder;
+    }
+    
     const key = `${this.key}/${src}`;
     let video = Video.pool[key];
     if (!video) {

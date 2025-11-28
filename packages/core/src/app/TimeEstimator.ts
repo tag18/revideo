@@ -67,9 +67,16 @@ export class TimeEstimator {
     this.lastUpdateTimestamp = timestamp;
   }
 
-  public reportProgress() {
+  public reportProgress(currentFrame?: number, totalFrames?: number) {
     if ((window as any).logProgress) {
-      (window as any).logProgress(this.completion.current);
+      const estimate = this.estimate();
+      (window as any).logProgress(
+        this.completion.current,
+        estimate.elapsed,
+        estimate.eta,
+        currentFrame,
+        totalFrames
+      );
     }
   }
 

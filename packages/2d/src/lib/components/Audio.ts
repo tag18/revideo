@@ -1,4 +1,4 @@
-import {DependencyContext, PlaybackState} from '@revideo/core';
+import {DependencyContext, PlaybackState, useLogger} from '@revideo/core';
 import {computed, nodeName} from '../decorators';
 import type {MediaProps} from './Media';
 import {Media} from './Media';
@@ -26,7 +26,20 @@ export class Audio extends Media {
   @computed()
   protected audio(): HTMLAudioElement {
     const src = this.src();
-    const key = `${this.key}/${src}`;
+    const nodeKey = this.key;
+    
+    if (!src) {
+      useLogger().warn({
+        message: `Audio src is undefined`,
+        remarks: `Audio element with key="${nodeKey}" has no src. This may cause loading issues.`,
+        inspect: nodeKey,
+      });
+      const placeholder = document.createElement('audio');
+      placeholder.crossOrigin = 'anonymous';
+      return placeholder;
+    }
+    
+    const key = `${nodeKey}/${src}`;
     let audio = Audio.pool[key];
     if (!audio) {
       audio = document.createElement('audio');
@@ -137,7 +150,24 @@ export class Audio extends Media {
       this.playing() && time < endTime && audio.playbackRate > 0;
     if (playing) {
       if (audio.paused) {
-        DependencyContext.collectPromise(audio.play());
+        const playPromise = audio.play();
+        const errorPromise = new Promise<void>(resolve => {
+          const onError = () => {
+            const errorCode = audio.error?.code;
+            const errorMessage = this.getErrorReason(errorCode);
+            useLogger().error({
+              message: `Audio play failed`,
+              remarks: `Audio "${this.key}" (src: ${this.src()}) failed to play. Error: ${errorMessage}`,
+              inspect: this.key,
+            });
+            audio.removeEventListener('error', onError);
+            resolve();
+          };
+          audio.addEventListener('error', onError, {once: true});
+        });
+        DependencyContext.collectPromise(
+          Promise.race([playPromise, errorPromise]).catch(() => {})
+        );
       }
     } else {
       if (!audio.paused) {

@@ -88,6 +88,10 @@ async function initBrowserAndServer(
   args.includes('--single-process') || args.push('--single-process');
 
   const resolvedProjectPath = path.join(process.cwd(), projectFile);
+  
+  // Extract plugins from viteConfig to merge them properly
+  const {plugins: userPlugins, ...restViteConfig} = settings.viteConfig || {};
+  
   const [browser, server] = await Promise.all([
     puppeteer.launch({headless: true, ...settings.puppeteer, args}),
     createServer({
@@ -100,13 +104,15 @@ async function initBrowserAndServer(
           settings.ffmpeg,
           projectFile,
         ),
+        // Merge user plugins if provided
+        ...(Array.isArray(userPlugins) ? userPlugins : userPlugins ? [userPlugins] : []),
       ],
-      ...settings.viteConfig,
+      ...restViteConfig,
       server: {
         port: fixedPort,
         hmr: false,
         ...settings.viteServerOptions,
-        ...settings.viteConfig?.server,
+        ...restViteConfig?.server,
       },
     }).then(server => server.listen()),
   ]);
@@ -124,12 +130,40 @@ async function initBrowserAndServer(
   return {browser, server, resolvedPort};
 }
 
+interface ProgressData {
+  progress: number;
+  currentFrame: number;
+  totalFrames: number;
+  startTime: number;
+  lastUpdateTime: number;
+}
+
 function trackProgress(
-  tracker: Map<number, number>,
+  tracker: Map<number, ProgressData>,
   id: number,
   progress: number,
+  elapsed: number = 0,
+  eta: number = 0,
+  currentFrame: number = 0,
+  totalFrames: number = 0,
 ) {
-  tracker.set(id, progress);
+  const existing = tracker.get(id);
+  const now = Date.now();
+  tracker.set(id, {
+    progress,
+    currentFrame,
+    totalFrames,
+    startTime: existing?.startTime ?? now,
+    lastUpdateTime: now,
+  });
+}
+
+function formatTime(ms: number): string {
+  if (!isFinite(ms) || ms < 0) return '--:--';
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 }
 
 /**
@@ -140,14 +174,23 @@ async function renderVideoOnPage(
   browser: Browser,
   server: ViteDevServer,
   url: string,
-  progressTracker: Map<number, number>,
+  progressTracker: Map<number, ProgressData>,
   progressCallback?: (worker: number, progress: number) => void,
   logProgress?: boolean,
 ) {
   function printProgress() {
     let line = '';
-    for (const [key, value] of progressTracker.entries()) {
-      line += `Render progress, worker ${key}: ${(value * 100).toFixed(0)}% `;
+    const now = Date.now();
+    for (const [key, data] of progressTracker.entries()) {
+      const realElapsed = now - data.startTime;
+      const percent = (data.progress * 100).toFixed(0);
+      const fps = realElapsed > 0 ? (data.currentFrame / (realElapsed / 1000)).toFixed(1) : '0.0';
+      // Calculate ETA based on current progress and real elapsed time
+      const eta = data.progress > 0 ? (realElapsed / data.progress) * (1 - data.progress) : Infinity;
+      // Show if stuck (no update for 5+ seconds)
+      const stuckTime = now - data.lastUpdateTime;
+      const stuckIndicator = stuckTime > 5000 ? ` ⚠️ STUCK ${Math.floor(stuckTime/1000)}s` : '';
+      line += `[Worker ${key}] ${percent}% | Frame: ${data.currentFrame}/${data.totalFrames} | FPS: ${fps} | Elapsed: ${formatTime(realElapsed)} | ETA: ${formatTime(eta)}${stuckIndicator} `;
     }
 
     if (line === '') {
@@ -188,12 +231,12 @@ async function renderVideoOnPage(
     }
   });
 
-  page.exposeFunction('logProgress', (progress: number) => {
+  page.exposeFunction('logProgress', (progress: number, elapsed: number = 0, eta: number = 0, currentFrame: number = 0, totalFrames: number = 0) => {
     if (progressCallback) {
       progressCallback(id, progress);
     }
     if (logProgress) {
-      trackProgress(progressTracker, id, progress);
+      trackProgress(progressTracker, id, progress, elapsed, eta, currentFrame, totalFrames);
     }
   });
 
@@ -238,7 +281,7 @@ async function initializeBrowserAndStartRendering(
   const port =
     (settings.viteBasePort !== undefined ? settings.viteBasePort : 9000) + i;
 
-  const progressTracker = new Map<number, number>();
+  const progressTracker = new Map<number, ProgressData>();
 
   const {browser, server, resolvedPort} = await initBrowserAndServer(
     port,

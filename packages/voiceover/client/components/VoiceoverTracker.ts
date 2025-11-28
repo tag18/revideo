@@ -20,7 +20,6 @@ export class VoiceoverTracker {
   ) {
     this._duration = duration;
     this._wordBoundaries = wordBoundaries;
-    console.log('🔧 VoiceoverTracker constructed:', new Date().toISOString());
   }
 
   /**
@@ -85,13 +84,6 @@ export class VoiceoverTracker {
    * This parses the original text and calculates timing for each bookmark
    */
   processBookmarks(text: string): void {
-    console.log('🔧🔧🔧 processBookmarks VERSION 2.0 called with text:', text);
-    console.log('🔧🔧🔧 wordBoundaries length:', this._wordBoundaries.length);
-    if (this._wordBoundaries.length > 0) {
-      console.log('🔧🔧🔧 wordBoundaries[0]:', JSON.stringify(this._wordBoundaries[0]));
-      console.log('🔧🔧🔧 wordBoundaries[1]:', JSON.stringify(this._wordBoundaries[1]));
-    }
-    
     this._bookmarkTimes.clear();
 
     if (!this._wordBoundaries || this._wordBoundaries.length === 0) {
@@ -109,8 +101,6 @@ export class VoiceoverTracker {
       if (firstWordIndexInText >= 0) {
         // ssmlOffset = Azure's textOffset for first word - position in clean text
         ssmlOffset = firstWord.textOffset - firstWordIndexInText;
-        console.log(`🔧🔧🔧 First word "${firstWord.text}" at position ${firstWordIndexInText} in text, textOffset=${firstWord.textOffset} in SSML`);
-        console.log(`🔧🔧🔧 Calculated SSML offset: ${ssmlOffset}`);
       }
     }
 
@@ -128,19 +118,12 @@ export class VoiceoverTracker {
       // to our bookmark position to match Azure's coordinate system
       const textOffset = ssmlOffset + bookmarkPosition;
       
-      console.log(`🔍 Processing bookmark '${mark}': bookmarkPosition=${bookmarkPosition}, ssmlOffset=${ssmlOffset}, textOffset=${textOffset}`);
-      
       // Find corresponding audio offset using word boundaries
       const audioOffset = this.interpolateAudioOffset(textOffset);
-      
-      console.log(`🔍 Bookmark '${mark}': audioOffset=${audioOffset}ms = ${audioOffset / 1000}s`);
       
       // Store bookmark timing (in seconds)
       this._bookmarkTimes.set(mark, audioOffset / 1000);
     }
-
-    console.log('📍 Bookmarks processed:', Array.from(this._bookmarkTimes.entries()));
-    console.log('📍 Word boundaries:', this._wordBoundaries.slice(0, 5));
   }
 
   /**
@@ -153,10 +136,6 @@ export class VoiceoverTracker {
       return 0;
     }
 
-    console.log(`🔍 interpolateAudioOffset(${textOffset})`);
-    console.log(`   wordBoundaries[0]:`, this._wordBoundaries[0]);
-    console.log(`   wordBoundaries[1]:`, this._wordBoundaries[1]);
-
     // Find the two word boundaries that surround this text offset
     let prevBoundary = this._wordBoundaries[0];
     let nextBoundary = this._wordBoundaries[this._wordBoundaries.length - 1];
@@ -168,14 +147,12 @@ export class VoiceoverTracker {
       if (textOffset >= curr.textOffset && textOffset <= next.textOffset) {
         prevBoundary = curr;
         nextBoundary = next;
-        console.log(`   Found boundaries: prev=${JSON.stringify(curr)}, next=${JSON.stringify(next)}`);
         break;
       }
     }
 
     // Linear interpolation between boundaries
     if (prevBoundary.textOffset === nextBoundary.textOffset) {
-      console.log(`   Same textOffset, returning audioOffset=${prevBoundary.audioOffset}`);
       return prevBoundary.audioOffset;
     }
 
@@ -185,8 +162,6 @@ export class VoiceoverTracker {
 
     const result = prevBoundary.audioOffset + 
       ratio * (nextBoundary.audioOffset - prevBoundary.audioOffset);
-    
-    console.log(`   Interpolation: ratio=${ratio}, result=${result}ms`);
 
     return result;
   }

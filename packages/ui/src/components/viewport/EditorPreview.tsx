@@ -1,11 +1,12 @@
 import clsx from 'clsx';
 import type {ComponentChildren} from 'preact';
-import {useCallback, useMemo, useRef} from 'preact/hooks';
+import {useCallback, useMemo, useRef, useState} from 'preact/hooks';
 import type {ViewportState} from '../../contexts';
 import {ViewportProvider, useApplication} from '../../contexts';
 import {
   useDocumentEvent,
   useDrag,
+  useKeyHold,
   usePreviewSettings,
   useSharedSettings,
   useSize,
@@ -16,7 +17,7 @@ import {MouseButton} from '../../utils';
 import {highlight} from '../animations';
 import {Button, Select} from '../controls';
 import {ButtonCheckbox} from '../controls/ButtonCheckbox';
-import {Grid as GridIcon, Recenter} from '../icons';
+import {Grid as GridIcon, Hand, Recenter} from '../icons';
 import {ColorPicker} from './ColorPicker';
 import {Inspector} from './Inspector';
 import {OverlayCanvas} from './OverlayCanvas';
@@ -27,6 +28,7 @@ const ZOOM_SPEED = 0.1;
 
 export function EditorPreview() {
   const {plugins, player} = useApplication();
+  const isSpacePressed = useKeyHold(' ');
   // TODO(refactor): understand what is happening here
   /*const coordinateSetting = useSubscribableValue(
     appSettings.appearance.coordinates.onChanged,
@@ -46,6 +48,7 @@ export function EditorPreview() {
     x: 0,
     y: 0,
   });
+  const [dragToolActive, setDragToolActive] = useState(false);
 
   const inspector = useMemo(() => <Inspector />, []);
   const drawHooks = useMemo(
@@ -184,7 +187,9 @@ export function EditorPreview() {
           onMouseDown={event => {
             if (
               event.button === MouseButton.Middle ||
-              (event.button === MouseButton.Left && event.shiftKey)
+              event.button === MouseButton.Right ||
+              (event.button === MouseButton.Left &&
+                (event.shiftKey || isSpacePressed || dragToolActive))
             ) {
               handleDrag(event);
             }
@@ -239,6 +244,13 @@ export function EditorPreview() {
             checked={grid}
           >
             <GridIcon />
+          </ButtonCheckbox>
+          <ButtonCheckbox
+            title={'Drag tool [Space]'}
+            onChecked={setDragToolActive}
+            checked={dragToolActive || isSpacePressed}
+          >
+            <Hand />
           </ButtonCheckbox>
           <ColorPicker />
           {/* TODO: {coordinateSetting && <Coordinates />}*/}

@@ -25,8 +25,13 @@ export class Bookmarks {
    * @param stack - Optional stack trace for navigation.
    */
   public add(name: string, time: number, color?: string, stack?: string): void {
-    if (this.lookup.has(name)) {
-      this.logger.warn(`Bookmark with name "${name}" already exists.`);
+    const existing = this.lookup.get(name);
+    if (
+      existing &&
+      existing.time === time &&
+      existing.color === color &&
+      existing.stack === stack
+    ) {
       return;
     }
 

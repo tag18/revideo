@@ -9,6 +9,7 @@ export * from './FastForward';
 export * from './FastRewind';
 export * from './Fullscreen';
 export * from './Grid';
+export * from './Hand';
 export * from './HourglassBottom';
 export * from './Locate';
 export * from './Movie';

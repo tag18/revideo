@@ -80,6 +80,13 @@ export class VoiceoverTracker {
   }
 
   /**
+   * Get word boundaries
+   */
+  getWordBoundaries(): WordBoundary[] {
+    return this._wordBoundaries;
+  }
+
+  /**
    * Process bookmarks from text with markers like <bookmark mark='A'/>
    * This parses the original text and calculates timing for each bookmark
    */

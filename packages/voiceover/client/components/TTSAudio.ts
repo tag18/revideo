@@ -657,4 +657,17 @@ export class TTSAudio extends Audio {
       yield* waitFor(timeUntil);
     }
   }
+
+  // AudioSource implementation
+  public currentTime(): number {
+    return this.getCurrentTime();
+  }
+
+  public getWordBoundaries(): WordBoundary[] {
+    return this.getTracker().getWordBoundaries();
+  }
+
+  public getText(): string {
+    return this.evaluateSignal(this._ttsText) || '';
+  }
 }

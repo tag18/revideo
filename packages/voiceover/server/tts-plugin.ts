@@ -4,6 +4,7 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 import type {TTSPluginConfig, TTSProvider, TTSRequest, TTSConfig} from './types';
 import {AzureTTSProvider} from './providers/azure';
+import {FILENAME_SANITIZATION_REGEX} from './utils';
 
 /**
  * Generate a cache key for the given text, config, and provider
@@ -170,8 +171,9 @@ export function ttsPlugin(config: TTSPluginConfig = {}): Plugin {
                 };
                 
                 // Create project-specific directory
+                // Allow alphanumeric, Chinese characters, dashes, and underscores
                 const projectDir = request.projectName
-                  ? request.projectName.replace(/[^a-zA-Z0-9-_]/g, '_')
+                  ? request.projectName.replace(FILENAME_SANITIZATION_REGEX, '_')
                   : 'default';
                 const projectAudioDir = path.join(audioDir, projectDir);
 

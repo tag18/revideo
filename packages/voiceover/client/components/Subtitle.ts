@@ -187,7 +187,25 @@ export class Subtitle extends Layout {
   }
 
   private segmentText(source: AudioSource) {
-    const boundaries = source.getWordBoundaries ? source.getWordBoundaries() : [];
+    const rawBoundaries = source.getWordBoundaries ? source.getWordBoundaries() : [];
+    
+    // Merge punctuation into previous words
+    const boundaries: WordBoundary[] = [];
+    for (const word of rawBoundaries) {
+      const isPunctuation = word.boundaryType === 'punctuation' || /^[.,:;!?，。：；！？、"']/.test(word.text.trim());
+      
+      if (isPunctuation && boundaries.length > 0) {
+        const lastWord = boundaries[boundaries.length - 1];
+        lastWord.text += word.text;
+        // Extend duration to include punctuation
+        const newEndTime = word.audioOffset + word.durationMs;
+        lastWord.durationMs = newEndTime - lastWord.audioOffset;
+      } else {
+        // Create a copy to avoid mutating the original source data
+        boundaries.push({...word});
+      }
+    }
+
     const config = this.config();
     const maxLines = config.layout?.maxLines ?? 2;
     const maxWidth = config.layout?.maxWidth ?? 1600; // Default max width
@@ -302,6 +320,7 @@ export class Subtitle extends Layout {
         const txt = new SubtitleTxt({
           text: word.text,
           marginLeft: marginLeft,
+          strokeFirst: true,
           ...textStyle,
         });
         // Store reference to word boundary for highlighting

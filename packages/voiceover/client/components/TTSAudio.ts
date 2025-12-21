@@ -24,6 +24,7 @@ export interface ProjectTTSDefaults {
   style?: string;
   role?: string;
   volume?: string;
+  projectName?: string;
 }
 
 /**
@@ -107,6 +108,7 @@ export class TTSAudio extends Audio {
   private _ttsVoice?: SignalValue<string>;
   private _ttsRate?: SignalValue<string>;
   private _ttsPitch?: SignalValue<string>;
+  private _projectName: string = 'default';
 
   private static formatRateAndPitch(value: string | undefined): string {
     // Handle undefined or null values
@@ -129,7 +131,7 @@ export class TTSAudio extends Audio {
     }
   }
 
-  private static async generateTTSStatic(text: string, voice: string, rate: string, pitch: string): Promise<{audioPath: string; wordBoundaries: WordBoundary[]; duration: number}> {
+  private static async generateTTSStatic(text: string, voice: string, rate: string, pitch: string, projectName: string): Promise<{audioPath: string; wordBoundaries: WordBoundary[]; duration: number}> {
     // Validate inputs
     if (!text || typeof text !== 'string') {
       throw new Error(`Invalid text parameter: ${text}`);
@@ -139,7 +141,7 @@ export class TTSAudio extends Audio {
     }
     
     // Convert rate and pitch to proper format
-    console.log('🎤 TTS Input params:', { text, voice, rate, pitch });
+    console.log('🎤 TTS Input params:', { text, voice, rate, pitch, projectName });
     const rateFormatted = TTSAudio.formatRateAndPitch(rate);
     const pitchFormatted = TTSAudio.formatRateAndPitch(pitch);
     
@@ -150,7 +152,7 @@ export class TTSAudio extends Audio {
         rate: rateFormatted,
         pitch: pitchFormatted,
       },
-      projectName: 'voiceover-test',
+      projectName: projectName,
     };
     
     console.log('🎤 TTS Request body:', JSON.stringify(requestBody, null, 2));
@@ -197,8 +199,10 @@ export class TTSAudio extends Audio {
     
     // Try to get project-level TTS defaults from variables
     let projectDefaults: ProjectTTSDefaults = {};
+    let sceneName = 'default';
     try {
       const scene = useScene();
+      sceneName = scene.name;
       // variables.get() returns a function, need to call it
       const getTTSDefaults = scene.variables.get<ProjectTTSDefaults>('ttsDefaults', {});
       projectDefaults = getTTSDefaults();
@@ -212,6 +216,8 @@ export class TTSAudio extends Audio {
     this._ttsVoice = voice ?? projectDefaults.voice ?? 'en-US-AriaNeural';
     this._ttsRate = rate ?? projectDefaults.rate ?? 'medium';
     this._ttsPitch = pitch ?? projectDefaults.pitch ?? 'medium';
+    // Use configured projectName, or fallback to scene name
+    this._projectName = projectDefaults.projectName ?? sceneName;
     this.isConstructing = false;
     
     // After construction, if a placeholder was created during construction, reinitialize
@@ -262,7 +268,8 @@ export class TTSAudio extends Audio {
           textValue,
           voiceValue,
           rateValue,
-          pitchValue
+          pitchValue,
+          this._projectName
         );
       }
       
@@ -388,7 +395,8 @@ export class TTSAudio extends Audio {
         textValue,
         voiceValue,
         rateValue,
-        pitchValue
+        pitchValue,
+        this._projectName
       );
     }
 

@@ -8,6 +8,7 @@ import type {
   AzureTTSCredentials,
   WordBoundary,
 } from '../types';
+import {FILENAME_SANITIZATION_REGEX} from '../utils';
 
 /**
  * Azure Cognitive Services TTS Provider
@@ -56,7 +57,7 @@ export class AzureTTSProvider implements TTSProvider {
     
     // Create project-specific directory
     const projectDir = projectName
-      ? projectName.replace(/[^a-zA-Z0-9-_]/g, '_')
+      ? projectName.replace(FILENAME_SANITIZATION_REGEX, '_')
       : 'default';
     const projectAudioDir = path.join(this.audioDir, projectDir);
 

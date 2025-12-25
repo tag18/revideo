@@ -27,6 +27,14 @@ yield view.add(
 tts().play();
 ```
 
+### ⚠️ Important: Text Content Required
+
+The `text` property **must contain actual speakable text**.
+- ✅ Correct: `"Hello world <break time='1s'/>"`
+- ❌ Incorrect: `"<break time='1s'/> <bookmark mark='A'/>"` (Only tags, no text)
+
+If you provide only SSML tags without text, the TTS service (e.g., Azure) may fail with an "Internal Error" because it cannot generate audio from empty content.
+
 ## 📁 Automatic File Organization
 
 `TTSAudio` automatically organizes generated audio files based on your project structure.

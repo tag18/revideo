@@ -129,9 +129,45 @@ export class AzureTTSProvider implements TTSProvider {
         !result ||
         actualReason !== sdk.ResultReason.SynthesizingAudioCompleted
       ) {
+        const errorDetails = result?.cancellationDetails?.errorDetails;
+        console.error('❌ Azure TTS SDK Error:', errorDetails);
+        
+        try {
+          const cancellation = (sdk as any).CancellationDetails.fromResult(result);
+          console.error('Cancellation Details:', {
+            reason: cancellation.reason,
+            errorDetails: cancellation.errorDetails,
+            errorCode: cancellation.ErrorCode
+          });
+
+          if (result?.properties) {
+             const json = result.properties.getProperty((sdk as any).PropertyId.SpeechServiceResponse_JsonResult);
+             if (json) console.error('🔍 Azure Raw Response:', json);
+          }
+        } catch (e) {}
+
         throw new Error(
-          `Speech synthesis failed: ${result?.cancellationDetails?.errorDetails || 'Unknown error'}`
+          `Speech synthesis failed: ${errorDetails || 'Unknown error'}`
         );
+      }
+
+      if (!audioData || audioData.byteLength === 0) {
+        try {
+          const cancellation = (sdk as any).CancellationDetails.fromResult(result);
+          console.error('Cancellation Details:', {
+            reason: cancellation.reason,
+            errorDetails: cancellation.errorDetails,
+            errorCode: cancellation.ErrorCode
+          });
+
+          if (result.properties) {
+            const jsonResult = result.properties.getProperty((sdk as any).PropertyId.SpeechServiceResponse_JsonResult);
+            console.error('🔍 Azure Raw Response:', jsonResult || 'Not available in properties');
+          }
+        } catch (e) {
+          console.error('❌ Azure TTS Failure: 0 bytes returned', e);
+        }
+        throw new Error('Azure TTS returned empty audio data. Check your subscription key and region.');
       }
 
       // Save audio file

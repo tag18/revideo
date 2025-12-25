@@ -187,21 +187,27 @@ export function ttsPlugin(config: TTSPluginConfig = {}): Plugin {
 
                 if (fs.existsSync(cachedAudioPath) && fs.existsSync(cachedMetadataPath)) {
                   try {
-                    const metadata = JSON.parse(fs.readFileSync(cachedMetadataPath, 'utf8'));
-                    console.log('Using cached TTS result for:', cacheKey);
+                    // Check if cached file is valid (not 0 bytes)
+                    const stats = fs.statSync(cachedAudioPath);
+                    if (stats.size === 0) {
+                      console.warn('Found 0-byte cached file, deleting and regenerating:', cachedAudioPath);
+                    } else {
+                      const metadata = JSON.parse(fs.readFileSync(cachedMetadataPath, 'utf8'));
+                      console.log('Using cached TTS result for:', cacheKey);
 
-                    // Use pre-calculated audioBaseUrl (no repeated calculation)
-                    const result = {
-                      success: true,
-                      duration: metadata.duration,
-                      wordBoundaries: metadata.wordBoundaries,
-                      audioPath: `${audioBaseUrl}/${projectDir}/${cacheKey}.mp3`,
-                      cached: true,
-                    };
+                      // Use pre-calculated audioBaseUrl (no repeated calculation)
+                      const result = {
+                        success: true,
+                        duration: metadata.duration,
+                        wordBoundaries: metadata.wordBoundaries,
+                        audioPath: `${audioBaseUrl}/${projectDir}/${cacheKey}.mp3`,
+                        cached: true,
+                      };
 
-                    res.writeHead(200, {'Content-Type': 'application/json'});
-                    res.end(JSON.stringify(result));
-                    return;
+                      res.writeHead(200, {'Content-Type': 'application/json'});
+                      res.end(JSON.stringify(result));
+                      return;
+                    }
                   } catch (cacheError) {
                     console.warn('Failed to read cached metadata, regenerating:', cacheError);
                     // Continue to generate new TTS
@@ -213,21 +219,41 @@ export function ttsPlugin(config: TTSPluginConfig = {}): Plugin {
                 const result = await provider.synthesize(mergedRequest);
                 
                 if (!result.success) {
+                  const errorMessage = result.error || 'TTS synthesis failed';
+                  console.error('❌ TTS Generation Failed:', errorMessage);
+                  
                   res.writeHead(500, {'Content-Type': 'application/json'});
                   res.end(JSON.stringify({ 
                     success: false, 
-                    error: result.error || 'TTS synthesis failed' 
+                    error: errorMessage 
                   }));
                   return;
                 }
 
                 // Provider should have saved file using the cacheKey
-                // Verify the file exists
+                // Verify the file exists and is not empty
                 if (!fs.existsSync(cachedAudioPath)) {
+                  console.error('❌ TTS Error: Provider claimed success but file not found:', cachedAudioPath);
                   res.writeHead(500, {'Content-Type': 'application/json'});
                   res.end(JSON.stringify({ 
                     success: false, 
                     error: 'Provider failed to save audio file with correct cache key' 
+                  }));
+                  return;
+                }
+
+                const stats = fs.statSync(cachedAudioPath);
+                if (stats.size === 0) {
+                  // Delete the empty file
+                  fs.unlinkSync(cachedAudioPath);
+                  
+                  const errorMessage = 'TTS provider generated an empty (0-byte) audio file. Please check your API credentials and quota.';
+                  console.error('❌ TTS Error:', errorMessage);
+                  
+                  res.writeHead(500, {'Content-Type': 'application/json'});
+                  res.end(JSON.stringify({ 
+                    success: false, 
+                    error: errorMessage 
                   }));
                   return;
                 }

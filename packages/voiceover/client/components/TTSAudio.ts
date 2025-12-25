@@ -300,14 +300,46 @@ export class TTSAudio extends Audio {
           console.log('🔍 DEBUG: After setting src, signal value:', this.src());
           
           // Wait for canplay event
-          return new Promise<string>((resolve) => {
-            this.cachedAudioNode!.addEventListener('canplay', () => {
-              console.log('✅ TTSAudio: Ready to play, duration:', this.cachedAudioNode!.duration);
-              console.log('🔍 DEBUG: cachedAudioNode:', this.cachedAudioNode);
-              console.log('🔍 DEBUG: cachedAudioNode.src:', this.cachedAudioNode!.src);
-              console.log('🔍 DEBUG: cachedAudioNode.readyState:', this.cachedAudioNode!.readyState);
+          return new Promise<string>((resolve, reject) => {
+            const audio = this.cachedAudioNode!;
+            
+            const onCanPlay = () => {
+              console.log('✅ TTSAudio: Ready to play, duration:', audio.duration);
+              cleanup();
               resolve(result.audioPath);
-            }, { once: true });
+            };
+            
+            const onError = async (e: Event) => {
+              const error = audio.error;
+              let errorMessage = `Audio load failed: ${error?.message || 'Unknown error'} (Code: ${error?.code})`;
+              
+              // Diagnostic: Check if file exists and has content
+              try {
+                 const response = await fetch(result.audioPath, { method: 'HEAD' });
+                 const size = response.headers.get('content-length');
+                 if (response.status === 404) {
+                    errorMessage += ' (File not found)';
+                 } else if (size === '0') {
+                    errorMessage += ' (File is empty/0 bytes - TTS generation likely failed silently)';
+                 } else if (response.status === 416) {
+                    errorMessage += ' (Range Not Satisfiable - File likely empty)';
+                 }
+              } catch (err) {
+                 // ignore fetch error
+              }
+
+              console.error('❌ TTSAudio:', errorMessage);
+              cleanup();
+              reject(new Error(errorMessage));
+            };
+            
+            const cleanup = () => {
+              audio.removeEventListener('canplay', onCanPlay);
+              audio.removeEventListener('error', onError);
+            };
+            
+            audio.addEventListener('canplay', onCanPlay, { once: true });
+            audio.addEventListener('error', onError, { once: true });
           });
         })
         .catch(error => {

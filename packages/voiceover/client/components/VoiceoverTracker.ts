@@ -1,5 +1,5 @@
 import type {WordBoundary} from '../types';
-import {waitFor, all} from '@revideo/core';
+import {waitFor, all, setTaskName} from '@revideo/core';
 
 /**
  * Voiceover tracker for managing duration and bookmarks
@@ -228,7 +228,11 @@ export class VoiceoverTracker {
     const bookmarkTime = this._bookmarkTimes.get(mark);
     
     if (bookmarkTime === undefined) {
-      throw new Error(`Bookmark '${mark}' not found. Available bookmarks: ${Array.from(this._bookmarkTimes.keys()).join(', ')}`);
+      const available = Array.from(this._bookmarkTimes.keys());
+      if (available.length === 0) {
+        throw new Error(`Bookmark '${mark}' not found. No bookmarks were loaded. This usually means TTS generation failed or the text contains no bookmarks.`);
+      }
+      throw new Error(`Bookmark '${mark}' not found. Available bookmarks: ${available.join(', ')}`);
     }
 
     return bookmarkTime;
@@ -345,12 +349,19 @@ export class VoiceoverTracker {
    * );
    * ```
    */
-  *startAt(mark: string, block: () => Generator<any>): Generator<any> {
-    const delayTime = this.durationTo(mark);
-    if (delayTime > 0) {
-      yield* waitFor(delayTime);
-    }
-    yield* block();
+  startAt(mark: string, block: () => Generator<any>): Generator<any> {
+    const self = this;
+    const task = function* () {
+      const delayTime = self.durationTo(mark);
+      if (delayTime > 0) {
+        yield* waitFor(delayTime);
+      }
+      yield* block();
+    };
+    
+    const generator = task();
+    setTaskName(generator, mark);
+    return generator;
   }
 
   /**

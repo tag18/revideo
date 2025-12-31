@@ -1,15 +1,15 @@
 import styles from './Timeline.module.scss';
 
 import {useScenes} from '../../hooks';
-import {BookmarkGroup} from './BookmarkGroup';
+import {MarkerGroup} from './MarkerGroup';
 
-export function BookmarkTrack() {
+export function MarkerTrack() {
   const scenes = useScenes();
 
   return (
-    <div className={styles.bookmarkTrack}>
+    <div className={styles.markerTrack}>
       {scenes.map(scene => (
-        <BookmarkGroup key={scene.name} scene={scene} />
+        <MarkerGroup key={scene.name} scene={scene} />
       ))}
     </div>
   );

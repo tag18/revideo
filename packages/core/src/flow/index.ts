@@ -5,7 +5,7 @@
 
 export * from './all';
 export * from './any';
-export * from './bookmark';
+export * from './marker';
 export * from './chain';
 export * from './delay';
 export * from './every';

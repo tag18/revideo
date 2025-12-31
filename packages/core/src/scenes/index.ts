@@ -15,4 +15,4 @@ export * from './Shaders';
 export * from './Slides';
 export * from './Threadable';
 export * from './Variables';
-export * from './bookmarks';
+export * from './markers';

@@ -237,7 +237,7 @@
   padding: 4px 0;
 }
 
-.bookmarkTrack {
+.markerTrack {
   position: absolute;
   top: 0;
   left: 0;
@@ -247,7 +247,7 @@
   z-index: 5;
 }
 
-.bookmarkMarker {
+.markerMarker {
   position: absolute;
   cursor: pointer;
   pointer-events: all;
@@ -258,27 +258,27 @@
   }
 }
 
-.bookmarkMarkerLine {
+.markerMarkerLine {
   position: absolute;
   width: 3px;
   height: 32px;
-  background-color: var(--bookmark-color, #FFA726);
+  background-color: var(--marker-color, #FFA726);
   opacity: 0.8;
   box-shadow: 0 0 4px rgba(0, 0, 0, 0.5);
   
-  .bookmarkMarker:hover & {
+  .markerMarker:hover & {
     width: 4px;
     opacity: 1;
     box-shadow: 0 0 8px rgba(0, 0, 0, 0.7);
   }
 }
 
-.bookmarkMarkerLabel {
+.markerMarkerLabel {
   position: absolute;
   left: 8px;
   top: 6px;
   padding: 3px 8px;
-  background-color: var(--bookmark-color, #FFA726);
+  background-color: var(--marker-color, #FFA726);
   color: rgba(0, 0, 0, 0.87);
   border-radius: 4px;
   font-size: 11px;
@@ -289,7 +289,7 @@
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
   z-index: 20;
   
-  .bookmarkMarker:hover & {
+  .markerMarker:hover & {
     opacity: 1;
   }
 }

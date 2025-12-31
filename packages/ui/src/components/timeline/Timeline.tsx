@@ -18,7 +18,7 @@ import {useShortcut} from '../../hooks/useShortcut';
 import {labelClipDraggingLeftSignal} from '../../signals';
 import {MouseButton, MouseMask, clamp} from '../../utils';
 import {borderHighlight} from '../animations';
-import {BookmarkTrack} from './BookmarkTrack';
+import {MarkerTrack} from './MarkerTrack';
 import {LabelTrack} from './LabelTrack';
 import {Playhead} from './Playhead';
 import {RangeSelector} from './RangeSelector';
@@ -291,7 +291,7 @@ export function Timeline() {
             >
               <RangeSelector rangeRef={rangeRef} />
               <Timestamps />
-              <BookmarkTrack />
+              <MarkerTrack />
               <div className={styles.trackContainer}>
                 <SceneTrack />
                 <LabelTrack />

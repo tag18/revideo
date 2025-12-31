@@ -1,15 +1,15 @@
 import type {Scene} from '@revideo/core';
 import {useTimelineContext} from '../../contexts';
 import {useSubscribableValue} from '../../hooks';
-import {BookmarkMarker} from './BookmarkMarker';
+import {MarkerMarker} from './MarkerMarker';
 
-interface BookmarkGroupProps {
+interface MarkerGroupProps {
   scene: Scene;
 }
 
-export function BookmarkGroup({scene}: BookmarkGroupProps) {
+export function MarkerGroup({scene}: MarkerGroupProps) {
   const {firstVisibleFrame, lastVisibleFrame} = useTimelineContext();
-  const bookmarks = useSubscribableValue(scene.bookmarks.onChanged);
+  const markers = useSubscribableValue(scene.markers.onChanged);
   const cached = useSubscribableValue(scene.onCacheChanged);
   const isVisible =
     cached.lastFrame >= firstVisibleFrame &&
@@ -18,8 +18,8 @@ export function BookmarkGroup({scene}: BookmarkGroupProps) {
   return (
     <>
       {isVisible &&
-        bookmarks.map(bookmark => (
-          <BookmarkMarker key={bookmark.name} bookmark={bookmark} scene={scene} />
+        markers.map(marker => (
+          <MarkerMarker key={marker.name} marker={marker} scene={scene} />
         ))}
     </>
   );

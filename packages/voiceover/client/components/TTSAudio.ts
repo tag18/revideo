@@ -359,7 +359,6 @@ export class TTSAudio extends Audio {
       
     } else {
       // No valid text, use silent placeholder
-      console.warn('⚠️ TTSAudio: No valid text provided, using silent audio');
       if (!TTSAudio.silentAudioUrl) {
         TTSAudio.silentAudioUrl = TTSAudio.createSilentAudio();
       }

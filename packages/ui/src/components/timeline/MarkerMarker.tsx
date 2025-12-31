@@ -2,7 +2,8 @@ import styles from './Timeline.module.scss';
 
 import type {Scene, Marker} from '@revideo/core';
 import {useApplication, useTimelineContext} from '../../contexts';
-import {findAndOpenFirstUserFile} from '../../utils';
+import {findAndOpenFirstUserFile, formatDuration} from '../../utils';
+import {useState} from 'preact/hooks';
 
 interface MarkerMarkerProps {
   marker: Marker;
@@ -12,9 +13,15 @@ interface MarkerMarkerProps {
 export function MarkerMarker({marker, scene}: MarkerMarkerProps) {
   const {framesToPercents} = useTimelineContext();
   const {player} = useApplication();
+  const [showTooltip, setShowTooltip] = useState(false);
 
   const markerFrame = scene.firstFrame + scene.playback.secondsToFrames(marker.time);
   const position = framesToPercents(markerFrame);
+  
+  // Calculate time information
+  const markerTimeInSeconds = marker.time;
+  const markerTimeFormatted = formatDuration(markerTimeInSeconds);
+  const sceneTimeFormatted = formatDuration(marker.time); // Time relative to scene start
 
   return (
     <div
@@ -23,7 +30,15 @@ export function MarkerMarker({marker, scene}: MarkerMarkerProps) {
         left: `${position}%`,
         '--marker-color': marker.color || '#FFA726',
       } as any}
-      title={marker.name}
+      onMouseEnter={() => setShowTooltip(true)}
+      onMouseLeave={(e) => {
+        // Check if mouse is moving to the tooltip
+        const relatedTarget = e.relatedTarget as HTMLElement;
+        if (relatedTarget?.closest(`.${styles.markerTooltip}`)) {
+          return;
+        }
+        setShowTooltip(false);
+      }}
       onPointerDown={e => {
         e.stopPropagation();
       }}
@@ -47,6 +62,26 @@ export function MarkerMarker({marker, scene}: MarkerMarkerProps) {
     >
       <div className={styles.markerMarkerLine} />
       <div className={styles.markerMarkerLabel}>{marker.name}</div>
+      {showTooltip && (
+        <div 
+          className={styles.markerTooltip}
+          onMouseLeave={() => setShowTooltip(false)}
+        >
+          <div className={styles.markerTooltipName}>{marker.name}</div>
+          <div className={styles.markerTooltipInfo}>
+            <span className={styles.markerTooltipLabel}>Scene:</span>
+            <span className={styles.markerTooltipValue}>{scene.name}</span>
+          </div>
+          <div className={styles.markerTooltipInfo}>
+            <span className={styles.markerTooltipLabel}>Time:</span>
+            <span className={styles.markerTooltipValue}>{markerTimeFormatted}</span>
+          </div>
+          <div className={styles.markerTooltipInfo}>
+            <span className={styles.markerTooltipLabel}>Frame:</span>
+            <span className={styles.markerTooltipValue}>{markerFrame}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

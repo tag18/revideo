@@ -161,17 +161,21 @@ export function ttsPlugin(config: TTSPluginConfig = {}): Plugin {
                   ...request.config,
                 };
 
-                // Generate cache key (includes provider name to avoid collisions)
-                const cacheKey = generateCacheKey(request.text, provider.name, mergedConfig);
 
+                // Generate cache key (hash)
+                const cacheHash = generateCacheKey(request.text, provider.name, mergedConfig);
+
+                // Determine target filename (user provided OR hash)
+                const targetFileName = request.fileName ? request.fileName : cacheHash;
+                
+                // Add cacheHash to provider request so it knows the "real" identity
                 const mergedRequest: TTSRequest = {
                   ...request,
                   config: mergedConfig,
-                  cacheKey,  // Pass cache key to provider
+                  cacheKey: targetFileName, // Provider uses this as filename
                 };
-                
-                // Create project-specific directory
-                // Allow alphanumeric, Chinese characters, dashes, and underscores
+
+                // ... project dir code ...
                 const projectDir = request.projectName
                   ? request.projectName.replace(FILENAME_SANITIZATION_REGEX, '_')
                   : 'default';
@@ -181,42 +185,52 @@ export function ttsPlugin(config: TTSPluginConfig = {}): Plugin {
                   fs.mkdirSync(projectAudioDir, {recursive: true});
                 }
 
-                // Check cache first (plugin-level caching)
-                const cachedAudioPath = path.join(projectAudioDir, `${cacheKey}.mp3`);
-                const cachedMetadataPath = path.join(projectAudioDir, `${cacheKey}.json`);
+                const cachedAudioPath = path.join(projectAudioDir, `${targetFileName}.mp3`);
+                const cachedMetadataPath = path.join(projectAudioDir, `${targetFileName}.json`);
+                
+                // INTELLIGENT CACHE CHECK
+                let shouldUseCache = false;
 
                 if (fs.existsSync(cachedAudioPath) && fs.existsSync(cachedMetadataPath)) {
                   try {
-                    // Check if cached file is valid (not 0 bytes)
                     const stats = fs.statSync(cachedAudioPath);
-                    if (stats.size === 0) {
-                      console.warn('Found 0-byte cached file, deleting and regenerating:', cachedAudioPath);
-                    } else {
-                      const metadata = JSON.parse(fs.readFileSync(cachedMetadataPath, 'utf8'));
-                      console.log('Using cached TTS result for:', cacheKey);
+                    if (stats.size > 0) {
+                        const metadata = JSON.parse(fs.readFileSync(cachedMetadataPath, 'utf8'));
+                        // If user provided a specific filename, we MUST check if the content hash matches.
+                        // If no filename provided (legacy hash mode), the filename IS the hash, so it matches.
+                        const hashMatch = request.fileName ? (metadata.hash === cacheHash) : true;
+                        
+                        if (hashMatch) {
+                            shouldUseCache = true;
+                            console.log(`Using cached TTS result for: ${targetFileName} (Hash: ${cacheHash})`);
 
-                      // Use pre-calculated audioBaseUrl (no repeated calculation)
-                      const result = {
-                        success: true,
-                        duration: metadata.duration,
-                        wordBoundaries: metadata.wordBoundaries,
-                        audioPath: `${audioBaseUrl}/${projectDir}/${cacheKey}.mp3`,
-                        cached: true,
-                      };
+                             // Use pre-calculated audioBaseUrl (no repeated calculation)
+                            const result = {
+                                success: true,
+                                duration: metadata.duration,
+                                wordBoundaries: metadata.wordBoundaries,
+                                audioPath: `${audioBaseUrl}/${projectDir}/${targetFileName}.mp3`,
+                                metadataPath: `${audioBaseUrl}/${projectDir}/${targetFileName}.json`,
+                                cached: true,
+                            };
 
-                      res.writeHead(200, {'Content-Type': 'application/json'});
-                      res.end(JSON.stringify(result));
-                      return;
+                            res.writeHead(200, {'Content-Type': 'application/json'});
+                            res.end(JSON.stringify(result));
+                            return;
+                        } else {
+                             console.log(`Cache mismatch for ${targetFileName}. Expected hash: ${cacheHash}, Found: ${metadata.hash}. Regenerating.`);
+                        }
                     }
-                  } catch (cacheError) {
-                    console.warn('Failed to read cached metadata, regenerating:', cacheError);
-                    // Continue to generate new TTS
+                  } catch (e) {
+                      console.warn('Cache check failed:', e);
                   }
                 }
-
-                // Cache miss - call provider to generate
-                // Provider receives cacheKey and uses it directly as filename
+                
+                // If we get here, we need to regenerate (either missing, empty, or hash mismatch)
+                
+                // CACHE MISS or GENERATION REQUIRED
                 const result = await provider.synthesize(mergedRequest);
+
                 
                 if (!result.success) {
                   const errorMessage = result.error || 'TTS synthesis failed';
@@ -260,6 +274,7 @@ export function ttsPlugin(config: TTSPluginConfig = {}): Plugin {
 
                 // Save metadata for cache
                 const metadata = {
+                  hash: cacheHash, // Save content hash for validation
                   duration: result.duration,
                   wordBoundaries: result.wordBoundaries,
                   config: mergedConfig,
@@ -267,9 +282,15 @@ export function ttsPlugin(config: TTSPluginConfig = {}): Plugin {
                 };
                 fs.writeFileSync(cachedMetadataPath, JSON.stringify(metadata, null, 2));
 
+                const responseResult = {
+                    ...result,
+                    audioPath: `${audioBaseUrl}/${projectDir}/${targetFileName}.mp3`, // Ensure returned path matches target
+                    metadataPath: `${audioBaseUrl}/${projectDir}/${targetFileName}.json`
+                };
+
                 // Return result (audioPath should already be correct from provider)
                 res.writeHead(200, {'Content-Type': 'application/json'});
-                res.end(JSON.stringify(result));
+                res.end(JSON.stringify(responseResult));
               } catch (parseError) {
                 res.writeHead(400, {'Content-Type': 'application/json'});
                 res.end(

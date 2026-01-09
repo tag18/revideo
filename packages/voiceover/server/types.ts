@@ -14,6 +14,7 @@ export interface TTSRequest {
   text: string;
   config?: TTSConfig;
   projectName?: string;
+  fileName?: string; // Optional user-specified filename
   /** 
    * Suggested cache key for the audio file (e.g., "voice_abc12345")
    * Provider should use this as the filename to enable direct caching

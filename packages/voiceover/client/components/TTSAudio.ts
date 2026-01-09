@@ -11,6 +11,7 @@ export interface TTSAudioProps extends Omit<MediaProps, 'src'> {
   voice?: SignalValue<string>;
   rate?: SignalValue<string>;
   pitch?: SignalValue<string>;
+  fileName?: string;
 }
 
 /**
@@ -131,7 +132,7 @@ export class TTSAudio extends Audio {
     }
   }
 
-  private static async generateTTSStatic(text: string, voice: string, rate: string, pitch: string, projectName: string): Promise<{audioPath: string; wordBoundaries: WordBoundary[]; duration: number}> {
+  private static async generateTTSStatic(text: string, voice: string, rate: string, pitch: string, projectName: string, fileName?: string): Promise<{audioPath: string; wordBoundaries: WordBoundary[]; duration: number}> {
     // Validate inputs
     if (!text || typeof text !== 'string') {
       throw new Error(`Invalid text parameter: ${text}`);
@@ -141,7 +142,7 @@ export class TTSAudio extends Audio {
     }
     
     // Convert rate and pitch to proper format
-    console.log('🎤 TTS Input params:', { text, voice, rate, pitch, projectName });
+    console.log('🎤 TTS Input params:', { text, voice, rate, pitch, projectName, fileName });
     const rateFormatted = TTSAudio.formatRateAndPitch(rate);
     const pitchFormatted = TTSAudio.formatRateAndPitch(pitch);
     
@@ -153,6 +154,7 @@ export class TTSAudio extends Audio {
         pitch: pitchFormatted,
       },
       projectName: projectName,
+      fileName: fileName,
     };
     
     console.log('🎤 TTS Request body:', JSON.stringify(requestBody, null, 2));
@@ -173,6 +175,11 @@ export class TTSAudio extends Audio {
 
     const result = await response.json();
     console.log('🔗 TTSAudio generated audioPath:', result.audioPath);
+    
+    // Fallback: Derive metadata path if server didn't return it (e.g. old server instance)
+    const metadataPath = result.metadataPath || result.audioPath.replace(/\.mp3$/, '.json');
+    console.log('📄 TTS Metadata stored in:', metadataPath);
+
     console.log('📍 Word boundaries received:', result.wordBoundaries?.length || 0);
     
     if (!result.success || !result.audioPath) {
@@ -190,10 +197,11 @@ export class TTSAudio extends Audio {
   private currentTtsKey?: string;
   private currentGenerationPromise?: Promise<string>;
   private isConstructing = true; // Flag to mark if still in construction
+  private _fileName?: string;
 
   public constructor(props: TTSAudioProps) {
     // Extract TTS props
-    const {text, voice, rate, pitch, ...audioProps} = props;
+    const {text, voice, rate, pitch, fileName, ...audioProps} = props;
     
     super({src: undefined, ...audioProps}); // src: undefined, avoid loading invalid src
     
@@ -218,6 +226,7 @@ export class TTSAudio extends Audio {
     this._ttsPitch = pitch ?? projectDefaults.pitch ?? 'medium';
     // Use configured projectName, or fallback to scene name
     this._projectName = projectDefaults.projectName ?? sceneName;
+    this._fileName = fileName;
     this.isConstructing = false;
     
     // After construction, if a placeholder was created during construction, reinitialize
@@ -269,7 +278,8 @@ export class TTSAudio extends Audio {
           voiceValue,
           rateValue,
           pitchValue,
-          this._projectName
+          this._projectName,
+          this._fileName
         );
       }
       

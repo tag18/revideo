@@ -143,6 +143,19 @@ export class VoiceoverTracker {
       return 0;
     }
 
+    // CASE 1: Before first word -> Clamp to 0
+    if (textOffset <= this._wordBoundaries[0].textOffset) {
+        return 0;
+    }
+
+    // CASE 2: After last word -> Clamp to last word's audio offset
+    // (Or potentially estimate based on duration, but clamping is safer than linear extrapolation)
+    const lastBoundary = this._wordBoundaries[this._wordBoundaries.length - 1];
+    if (textOffset >= lastBoundary.textOffset) {
+        return lastBoundary.audioOffset;
+    }
+
+    // CASE 3: Between words
     // Find the two word boundaries that surround this text offset
     let prevBoundary = this._wordBoundaries[0];
     let nextBoundary = this._wordBoundaries[this._wordBoundaries.length - 1];

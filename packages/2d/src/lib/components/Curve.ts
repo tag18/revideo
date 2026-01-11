@@ -409,20 +409,102 @@ export abstract class Curve extends Shape {
     );
   }
 
+  /**
+   * Override drawShape to ensure curve + arrows are drawn as a unified visual unit.
+   * 
+   * Drawing order for proper outline effect:
+   * 1. Curve outline stroke + Arrow outline (same layer, behind)
+   * 2. Curve main stroke + Arrow main (same layer, on top)
+   * 
+   * This ensures the outline wraps around both the curve and arrow seamlessly.
+   */
   protected override drawShape(context: CanvasRenderingContext2D) {
-    super.drawShape(context);
-    if (this.startArrow() || this.endArrow()) {
-      this.drawArrows(context);
+    const path = this.getPath();
+    const hasStroke = this.lineWidth() > 0 && this.stroke() !== null;
+    const hasFill = this.fill() !== null;
+    const hasOutline = this.strokeOutlineWidth() > 0 && this.strokeOutline() !== null;
+    const hasArrows = this.startArrow() || this.endArrow();
+    
+    context.save();
+    this.applyStyle(context);
+    this.drawRipple(context);
+    
+    // Step 1: Draw ALL outlines first (curve + arrows as one layer)
+    if (hasOutline && hasStroke) {
+      context.save();
+      context.strokeStyle = resolveCanvasStyle(this.strokeOutline(), context);
+      context.lineWidth = this.lineWidth() + this.strokeOutlineWidth() * 2;
+      context.stroke(path);
+      context.restore();
+      
+      // Draw arrow outlines at the same time
+      if (hasArrows) {
+        this.drawArrowOutlines(context);
+      }
     }
+    
+    // Step 2: Draw fill (if any)
+    if (this.strokeFirst()) {
+      // If strokeFirst, we draw main stroke, then fill
+      if (hasStroke) {
+        context.stroke(path);
+        if (hasArrows) {
+          this.drawArrowFills(context, false); // main arrows
+        }
+      }
+      hasFill && context.fill(path);
+    } else {
+      // Normal order: fill first, then stroke
+      hasFill && context.fill(path);
+      if (hasStroke) {
+        context.stroke(path);
+        if (hasArrows) {
+          this.drawArrowFills(context, false); // main arrows
+        }
+      }
+    }
+    
+    // If no outline but has arrows, just draw the arrows
+    if (!hasOutline && hasArrows && hasStroke) {
+      this.drawArrowFills(context, false);
+    }
+    
+    context.restore();
   }
 
-  private drawArrows(context: CanvasRenderingContext2D) {
+  /**
+   * Draw arrow outlines (larger arrows behind main arrows)
+   */
+  private drawArrowOutlines(context: CanvasRenderingContext2D) {
     const {startPoint, startTangent, endPoint, endTangent, arrowSize} =
       this.curveDrawingInfo();
-    if (arrowSize < 0.001) {
-      return;
+    if (arrowSize < 0.001) return;
+    
+    const outlineWidth = this.strokeOutlineWidth();
+    const outlineArrowSize = arrowSize + outlineWidth * 2;
+    
+    context.save();
+    context.beginPath();
+    if (this.endArrow()) {
+      this.drawArrow(context, endPoint, endTangent.flipped, outlineArrowSize);
     }
+    if (this.startArrow()) {
+      this.drawArrow(context, startPoint, startTangent, outlineArrowSize);
+    }
+    context.fillStyle = resolveCanvasStyle(this.strokeOutline(), context);
+    context.closePath();
+    context.fill();
+    context.restore();
+  }
 
+  /**
+   * Draw arrow fills (main arrows or outline arrows)
+   */
+  private drawArrowFills(context: CanvasRenderingContext2D, isOutline: boolean) {
+    const {startPoint, startTangent, endPoint, endTangent, arrowSize} =
+      this.curveDrawingInfo();
+    if (arrowSize < 0.001) return;
+    
     context.save();
     context.beginPath();
     if (this.endArrow()) {

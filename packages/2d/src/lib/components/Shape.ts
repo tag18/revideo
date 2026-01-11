@@ -24,6 +24,21 @@ export interface ShapeProps extends LayoutProps {
   lineDash?: SignalValue<number[]>;
   lineDashOffset?: SignalValue<number>;
   antialiased?: SignalValue<boolean>;
+  /**
+   * The color of the stroke outline.
+   * 
+   * @remarks
+   * When set, an outline will be drawn behind the main stroke.
+   * Use together with {@link strokeOutlineWidth} to control the outline thickness.
+   */
+  strokeOutline?: SignalValue<PossibleCanvasStyle>;
+  /**
+   * The width of the stroke outline on each side.
+   * 
+   * @remarks
+   * The total outline thickness will be `lineWidth + 2 * strokeOutlineWidth`.
+   */
+  strokeOutlineWidth?: SignalValue<number>;
 }
 
 @nodeName('Shape')
@@ -53,6 +68,27 @@ export abstract class Shape extends Layout {
   @initial(true)
   @signal()
   public declare readonly antialiased: SimpleSignal<boolean, this>;
+  
+  /**
+   * The color of the stroke outline.
+   * 
+   * @remarks
+   * When set, an outline will be drawn behind the main stroke.
+   * Use together with {@link strokeOutlineWidth} to control the outline thickness.
+   */
+  @canvasStyleSignal()
+  public declare readonly strokeOutline: CanvasStyleSignal<this>;
+  
+  /**
+   * The width of the stroke outline on each side.
+   * 
+   * @remarks
+   * The total outline thickness will be `lineWidth + 2 * strokeOutlineWidth`.
+   * Default is 0 (no outline).
+   */
+  @initial(0)
+  @signal()
+  public declare readonly strokeOutlineWidth: SimpleSignal<number, this>;
 
   protected readonly rippleStrength = createSignal<number, this>(0);
 
@@ -97,9 +133,20 @@ export abstract class Shape extends Layout {
     const path = this.getPath();
     const hasStroke = this.lineWidth() > 0 && this.stroke() !== null;
     const hasFill = this.fill() !== null;
+    const hasOutline = this.strokeOutlineWidth() > 0 && this.strokeOutline() !== null;
     context.save();
     this.applyStyle(context);
     this.drawRipple(context);
+    
+    // Draw outline first (behind everything)
+    if (hasOutline && hasStroke) {
+      context.save();
+      context.strokeStyle = resolveCanvasStyle(this.strokeOutline(), context);
+      context.lineWidth = this.lineWidth() + this.strokeOutlineWidth() * 2;
+      context.stroke(path);
+      context.restore();
+    }
+    
     if (this.strokeFirst()) {
       hasStroke && context.stroke(path);
       hasFill && context.fill(path);
@@ -111,7 +158,8 @@ export abstract class Shape extends Layout {
   }
 
   protected override getCacheBBox(): BBox {
-    return super.getCacheBBox().expand(this.lineWidth() / 2);
+    const outlineExpansion = this.strokeOutlineWidth() > 0 ? this.strokeOutlineWidth() : 0;
+    return super.getCacheBBox().expand(this.lineWidth() / 2 + outlineExpansion);
   }
 
   @computed()

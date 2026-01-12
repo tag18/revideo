@@ -206,6 +206,7 @@ export class VoiceoverTracker {
    * Check if a bookmark exists
    */
   hasBookmark(mark: string): boolean {
+    if (mark === '@start' || mark === '@end') return true;
     return this._bookmarkTimes.has(mark);
   }
 
@@ -213,6 +214,8 @@ export class VoiceoverTracker {
    * Get bookmark time in seconds (absolute time from audio start)
    */
   getBookmarkTime(mark: string): number | undefined {
+    if (mark === '@start') return 0;
+    if (mark === '@end') return this._duration;
     return this._bookmarkTimes.get(mark);
   }
 
@@ -238,6 +241,9 @@ export class VoiceoverTracker {
    * ```
    */
   durationTo(mark: string): number {
+    if (mark === '@start') return 0;
+    if (mark === '@end') return this._duration;
+
     const bookmarkTime = this._bookmarkTimes.get(mark);
     
     if (bookmarkTime === undefined) {

@@ -189,21 +189,103 @@ export class Subtitle extends Layout {
   private segmentText(source: AudioSource) {
     const rawBoundaries = source.getWordBoundaries ? source.getWordBoundaries() : [];
     
-    // Merge punctuation into previous words
-    const boundaries: WordBoundary[] = [];
+    // Define punctuation patterns
+    // Opening punctuation should merge with the NEXT word
+    const isOpeningPunct = (text: string) => /^["'「『（《\[\(]$/.test(text.trim());
+    // Closing punctuation should merge with the PREVIOUS word  
+    const isClosingPunct = (text: string) => /^[.,:;!?，。：；！？、"'」』）》\]\)]$/.test(text.trim());
+    
+    // First pass: clean up whitespace and split words that contain both punctuation and text
+    const cleanedBoundaries: WordBoundary[] = [];
+    
     for (const word of rawBoundaries) {
-      const isPunctuation = word.boundaryType === 'punctuation' || /^[.,:;!?，。：；！？、"']/.test(word.text.trim());
+      // Clean up: remove newlines and extra spaces, trim
+      let cleanText = word.text.replace(/[\r\n]+/g, '').replace(/\s+/g, ' ').trim();
       
-      if (isPunctuation && boundaries.length > 0) {
-        const lastWord = boundaries[boundaries.length - 1];
-        lastWord.text += word.text;
-        // Extend duration to include punctuation
-        const newEndTime = word.audioOffset + word.durationMs;
-        lastWord.durationMs = newEndTime - lastWord.audioOffset;
-      } else {
-        // Create a copy to avoid mutating the original source data
-        boundaries.push({...word});
+      if (!cleanText) continue;
+      
+      // Check if this word contains mixed content (e.g., '"这' or '"\n    这')
+      // Split into separate parts if needed
+      const parts: string[] = [];
+      let currentPart = '';
+      
+      for (const char of cleanText) {
+        const isOpenChar = /["'「『（《\[\(]/.test(char);
+        const isCloseChar = /["'」』）》\]\).,:;!?，。：；！？、]/.test(char);
+        
+        if (isOpenChar || isCloseChar) {
+          if (currentPart) {
+            parts.push(currentPart);
+            currentPart = '';
+          }
+          parts.push(char);
+        } else {
+          currentPart += char;
+        }
       }
+      if (currentPart) {
+        parts.push(currentPart);
+      }
+      
+      // Create word boundaries for each part
+      // For simplicity, distribute the duration evenly (not perfect but better than broken display)
+      const durationPerPart = word.durationMs / parts.length;
+      let offset = word.audioOffset;
+      
+      for (const part of parts) {
+        if (part.trim()) {
+          cleanedBoundaries.push({
+            ...word,
+            text: part.trim(),
+            audioOffset: offset,
+            durationMs: durationPerPart,
+          });
+        }
+        offset += durationPerPart;
+      }
+    }
+    
+    // Second pass: merge punctuation into adjacent words
+    const boundaries: WordBoundary[] = [];
+    let pendingOpenQuote: WordBoundary | null = null;
+    
+    for (let i = 0; i < cleanedBoundaries.length; i++) {
+      const word = cleanedBoundaries[i];
+      const text = word.text.trim();
+      
+      // Check if this is opening punctuation
+      if (isOpeningPunct(text)) {
+        // Save to merge with next word
+        pendingOpenQuote = {...word};
+        continue;
+      }
+      
+      // Check if this is closing punctuation
+      if (isClosingPunct(text)) {
+        // Merge with previous word
+        if (boundaries.length > 0) {
+          const lastWord = boundaries[boundaries.length - 1];
+          lastWord.text += word.text;
+          // Extend duration to include punctuation
+          const newEndTime = word.audioOffset + word.durationMs;
+          lastWord.durationMs = newEndTime - lastWord.audioOffset;
+          continue;
+        }
+      }
+      
+      // Regular word
+      const newWord = {...word};
+      
+      // If there's a pending opening quote, prepend it
+      if (pendingOpenQuote) {
+        newWord.text = pendingOpenQuote.text + newWord.text;
+        // Use the opening quote's start time
+        newWord.audioOffset = pendingOpenQuote.audioOffset;
+        newWord.durationMs = (word.audioOffset + word.durationMs) - pendingOpenQuote.audioOffset;
+        pendingOpenQuote = null;
+      }
+      
+      boundaries.push(newWord);
     }
 
     const config = this.config();
@@ -302,7 +384,7 @@ export class Subtitle extends Layout {
       const lineContainer = new Layout({
         layout: true,
         direction: 'row',
-        alignItems: 'center',
+        alignItems: 'end',  // Use 'end' for consistent bottom alignment (baseline-like behavior)
         justifyContent: 'center',
       });
       
@@ -333,8 +415,15 @@ export class Subtitle extends Layout {
   }
 
   private shouldAddSpace(prev: string, curr: string): boolean {
-    // If current is punctuation, no space
-    if (/^[.,:;!?，。：；！？]/.test(curr)) return false;
+    // If current starts with closing punctuation, no space
+    if (/^[.,:;!?，。：；！？"'」』）》\]\)]/.test(curr)) return false;
+    
+    // If previous ends with opening punctuation, no space
+    if (/["'「『（《\[\(]$/.test(prev)) return false;
+    
+    // If current starts with opening quote (merged with word), check the actual first char
+    const currFirstChar = curr.charAt(0);
+    if (/["'「『（《\[\(]/.test(currFirstChar)) return false;
     
     // If both are CJK, no space
     const isPrevCJK = /[\u4e00-\u9fa5]/.test(prev);

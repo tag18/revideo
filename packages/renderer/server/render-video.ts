@@ -13,7 +13,7 @@ import {
   mergeAudioWithVideo,
 } from '@revideo/ffmpeg';
 import {EventName, sendEvent} from '@revideo/telemetry';
-import motionCanvas from '@revideo/vite-plugin';
+import motionCanvas, {exporterPlugin as imageExporterPlugin} from '@revideo/vite-plugin';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -77,12 +77,13 @@ function buildUrl(
 /**
  * Starts the vite server and creates a puppeteer browser instance
  */
-async function initBrowserAndServer(
+export async function initBrowserAndServer(
   fixedPort: number,
   projectFile: string,
   outputFolderName: string,
   settings: RenderSettings,
   variables?: Record<string, unknown>,
+  hmr: boolean = false,
 ) {
   const args = settings.puppeteer?.args ?? [];
   args.includes('--single-process') || args.push('--single-process');
@@ -104,13 +105,18 @@ async function initBrowserAndServer(
           settings.ffmpeg,
           projectFile,
         ),
+        imageExporterPlugin({outputPath: outputFolderName}),
         // Merge user plugins if provided
-        ...(Array.isArray(userPlugins) ? userPlugins : userPlugins ? [userPlugins] : []),
+        ...(Array.isArray(userPlugins)
+          ? userPlugins
+          : userPlugins
+            ? [userPlugins]
+            : []),
       ],
       ...restViteConfig,
       server: {
         port: fixedPort,
-        hmr: false,
+        hmr,
         ...settings.viteServerOptions,
         ...restViteConfig?.server,
       },
@@ -129,6 +135,7 @@ async function initBrowserAndServer(
 
   return {browser, server, resolvedPort};
 }
+
 
 interface ProgressData {
   progress: number;
@@ -169,7 +176,7 @@ function formatTime(ms: number): string {
 /**
  * Navigates to the URL and renders the video on the page
  */
-async function renderVideoOnPage(
+export async function renderVideoOnPage(
   id: number,
   browser: Browser,
   server: ViteDevServer,

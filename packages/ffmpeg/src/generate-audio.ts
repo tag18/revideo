@@ -81,13 +81,21 @@ function getAssetPlacement(frames: AssetInfo[][]): MediaAsset[] {
   // Calculate the duration based on frame count and durationInSeconds based on currentTime.
   assets.forEach(asset => {
     const timeInfo = assetTimeMap.get(asset.key);
+    // Recalculate the original duration based on frame count.
+    asset.duration = asset.endInVideo - asset.startInVideo + 1;
+    
     if (timeInfo) {
       // Calculate durationInSeconds based on the start and end currentTime values.
       asset.durationInSeconds =
         (timeInfo.end - timeInfo.start) / asset.playbackRate;
     }
-    // Recalculate the original duration based on frame count.
-    asset.duration = asset.endInVideo - asset.startInVideo + 1;
+    
+    // WORKAROUND: If currentTime didn't change (stuck at 0), the Audio was created
+    // in a sub-thread where useThread().time doesn't update during rendering.
+    // Use Infinity to let prepareAudio calculate duration from frame count instead.
+    if (asset.durationInSeconds === 0 && asset.duration > 1) {
+      asset.durationInSeconds = Infinity;
+    }
   });
 
   return assets;

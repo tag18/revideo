@@ -193,12 +193,14 @@ export class Scene2D extends GeneratorScene<View2D> implements Inspectable {
   }
 
   public override getMediaAssets(): Array<AssetInfo> {
+    const allAudios = Array.from(this.registeredNodes.values())
+      .filter((node): node is Audio => node instanceof Audio);
+    
     const playingVideos = Array.from(this.registeredNodes.values())
       .filter((node): node is Video => node instanceof Video)
       .filter(video => (video as Video).isPlaying());
 
-    const playingAudios = Array.from(this.registeredNodes.values())
-      .filter((node): node is Audio => node instanceof Audio)
+    const playingAudios = allAudios
       .filter(audio => (audio as Audio).isPlaying());
 
     const returnObjects: AssetInfo[] = [];

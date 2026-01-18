@@ -7,6 +7,22 @@ import {v4 as uuidv4} from 'uuid';
 import {initBrowserAndServer, renderVideoOnPage} from './render-video';
 
 /**
+ * Generate a timestamp string for file naming.
+ * Format: YYYYMMDD-HHmmss
+ */
+function generateTimestamp(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  const seconds = String(now.getSeconds()).padStart(2, '0');
+  
+  return `${year}${month}${day}-${hours}${minutes}${seconds}`;
+}
+
+/**
  * Render images from a revideo project.
  *
  * Unlike renderVideo, this function renders frames directly to PNG images
@@ -15,6 +31,19 @@ import {initBrowserAndServer, renderVideoOnPage} from './render-video';
 export interface RenderImageSettings {
   /** Output directory for images (default: './output') */
   outDir?: string;
+  /** 
+   * Base name for the output folder (default: 'images').
+   * When timestampVersioning is enabled, this becomes the prefix for the timestamped folder.
+   */
+  outName?: string;
+  /**
+   * Enable timestamp versioning for output folders.
+   * When enabled, images are saved in a timestamped subfolder (e.g., images-20260118-153045/)
+   * to preserve different versions. A 'latest' folder is also created/updated.
+   * 
+   * Default: true
+   */
+  timestampVersioning?: boolean;
   /** Puppeteer launch options */
   puppeteer?: PuppeteerLaunchOptions;
   /** Project settings to override */
@@ -43,9 +72,23 @@ export async function renderImages({
   settings = {},
   variables,
 }: RenderImageParams): Promise<string[]> {
-  const outputDir = path.resolve(settings.outDir ?? './output');
+  const timestampVersioning = settings.timestampVersioning ?? true;
+  const outName = settings.outName ?? 'images';
+  const baseOutputDir = path.resolve(settings.outDir ?? './output');
   const hiddenFolderId = uuidv4();
   const port = settings.viteBasePort ?? 9500;
+
+  // Determine the actual output directory
+  let outputDir: string;
+  let timestampedDir: string | null = null;
+  
+  if (timestampVersioning) {
+    const timestamp = generateTimestamp();
+    timestampedDir = path.join(baseOutputDir, `${outName}-${timestamp}`);
+    outputDir = timestampedDir;
+  } else {
+    outputDir = baseOutputDir;
+  }
 
   if (!fs.existsSync(outputDir)) {
     fs.mkdirSync(outputDir, {recursive: true});
@@ -78,6 +121,24 @@ export async function renderImages({
 
   const url = `http://localhost:${resolvedPort}/render?fileName=image&workerId=0&totalNumOfWorkers=1&hiddenFolderId=${encodeURIComponent(hiddenFolderId)}`;
   await renderVideoOnPage(0, browser, server, url, new Map(), undefined, true);
+
+  // Create/update 'latest' folder if timestamp versioning is enabled
+  if (timestampVersioning && timestampedDir) {
+    const latestDir = path.join(baseOutputDir, `${outName}-latest`);
+    
+    // Remove existing latest folder
+    if (fs.existsSync(latestDir)) {
+      await fs.promises.rm(latestDir, {recursive: true, force: true});
+    }
+    
+    // Copy timestamped folder to latest
+    await fs.promises.cp(timestampedDir, latestDir, {recursive: true});
+    
+    console.log(`Timestamped version saved to: ${timestampedDir}`);
+    console.log(`Latest version saved to: ${latestDir}`);
+    
+    return [timestampedDir, latestDir];
+  }
 
   return [outputDir];
 }

@@ -24,12 +24,37 @@ import {createServer} from 'vite';
 import {rendererPlugin} from './renderer-plugin';
 import {getParamDefaultsAndCheckValidity} from './validate-settings';
 
+/**
+ * Generate a timestamp string for file naming.
+ * Format: YYYYMMDD-HHmmss
+ */
+function generateTimestamp(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  const seconds = String(now.getSeconds()).padStart(2, '0');
+  
+  return `${year}${month}${day}-${hours}${minutes}${seconds}`;
+}
+
 export interface RenderSettings {
   // Name of the video file (default is 'video.mp4')
   outFile?: `${string}.mp4` | `${string}.webm` | `${string}.mov`;
 
   // Folder where the video will be saved (default is './out')
   outDir?: string;
+
+  /**
+   * Enable timestamp versioning for output files.
+   * When enabled, output files are saved with a timestamp suffix (e.g., video-20260118-153045.mp4)
+   * to preserve different versions. A copy without timestamp is also created as the "latest" version.
+   * 
+   * Default: true
+   */
+  timestampVersioning?: boolean;
 
   ffmpeg?: FfmpegSettings;
 
@@ -450,7 +475,7 @@ export async function renderVideo({
     numOfWorkers,
     hiddenFolderId,
     format,
-  } = getParamDefaultsAndCheckValidity(settings);
+  } = getParamDefaultsAndCheckValidity(settings, projectFile);
 
   // Start rendering
   const renderPromises = [];
@@ -495,7 +520,28 @@ export async function renderVideo({
     format,
   );
 
-  return path.join(outputFolderName, `${outputFileName}.${extensions[format]}`);
+  const finalOutputPath = path.join(outputFolderName, `${outputFileName}.${extensions[format]}`);
+
+  // Handle timestamp versioning
+  const timestampVersioning = settings.timestampVersioning ?? true;
+  if (timestampVersioning) {
+    const timestamp = generateTimestamp();
+    const timestampedFileName = `${outputFileName}-${timestamp}.${extensions[format]}`;
+    const timestampedPath = path.join(outputFolderName, timestampedFileName);
+    
+    // Rename the output file to include timestamp
+    await fs.promises.rename(finalOutputPath, timestampedPath);
+    
+    // Create a copy without timestamp as the "latest" version
+    await fs.promises.copyFile(timestampedPath, finalOutputPath);
+    
+    console.log(`Timestamped version saved to: ${timestampedPath}`);
+    console.log(`Latest version saved to: ${finalOutputPath}`);
+    
+    return timestampedPath;
+  }
+
+  return finalOutputPath;
 }
 
 interface RenderPartialVideoProps extends RenderVideoParams {
@@ -512,7 +558,7 @@ export const renderPartialVideo = async ({
   workerId,
 }: RenderPartialVideoProps) => {
   const {outputFileName, outputFolderName, hiddenFolderId, format} =
-    getParamDefaultsAndCheckValidity(settings);
+    getParamDefaultsAndCheckValidity(settings, projectFile);
 
   await initializeBrowserAndStartRendering(
     projectFile,

@@ -200,8 +200,43 @@ export class Scene2D extends GeneratorScene<View2D> implements Inspectable {
       .filter((node): node is Video => node instanceof Video)
       .filter(video => (video as Video).isPlaying());
 
+    // Get current scene time for detecting "stuck" audio
+    const sceneTime = this.playback.time;
+
+    // Filter out audio that has finished playing
+    // This handles two cases:
+    // 1. Normal case: currentTime >= duration (audio played through)
+    // 2. Bug case: currentTime stuck at 0 due to play={true} in constructor
+    //    In this case, we check if sceneTime has passed the audio duration
+    // Looping audio is not filtered out since it will continue playing
     const playingAudios = allAudios
-      .filter(audio => (audio as Audio).isPlaying());
+      .filter(audio => {
+        const isPlaying = (audio as Audio).isPlaying();
+        if (!isPlaying) return false;
+        
+        // Looping audio should always be included
+        if (audio.loop()) return true;
+        
+        const currentTime = audio.getCurrentTime();
+        const duration = audio.getDuration();
+        
+        // Skip if duration is not available yet
+        if (!duration || duration <= 0 || isNaN(duration)) return true;
+        
+        // Normal case: audio has finished playing (currentTime clamped to duration)
+        if (currentTime >= duration - 0.01) {
+          return false;
+        }
+        
+        // Bug case: currentTime stuck at 0, but scene time has passed duration
+        // This happens when Audio is created with play={true} prop
+        // The time signal doesn't properly bind to scene time during seek
+        if (currentTime === 0 && sceneTime > duration) {
+          return false;
+        }
+        
+        return true;
+      });
 
     const returnObjects: AssetInfo[] = [];
 
@@ -222,18 +257,38 @@ export class Scene2D extends GeneratorScene<View2D> implements Inspectable {
     );
 
     returnObjects.push(
-      ...playingAudios.map(audio => ({
-        key: audio.key,
-        type: 'audio' as const,
-        src: audio.src(),
-        playbackRate:
-          typeof audio.playbackRate === 'function'
-            ? audio.playbackRate()
-            : audio.playbackRate,
-        volume: audio.getVolume(),
-        currentTime: audio.getCurrentTime(),
-        duration: audio.getDuration(),
-      })),
+      ...playingAudios.map(audio => {
+        let currentTime = audio.getCurrentTime();
+        const duration = audio.getDuration();
+        const isLoop = audio.loop();
+        
+        // Fix for audio created with play={true} where currentTime is stuck at 0
+        // For such audio, we need to calculate the correct currentTime based on scene time
+        // This happens because the time signal doesn't properly bind during seek()
+        if (currentTime === 0 && sceneTime > 0.1) {
+          // Audio was likely added at scene start, calculate based on scene time
+          // For looping audio, use modulo to get the correct position within the loop
+          if (isLoop && duration > 0) {
+            currentTime = sceneTime % duration;
+          } else {
+            // For non-looping audio, use scene time directly (capped at duration)
+            currentTime = Math.min(sceneTime, duration || sceneTime);
+          }
+        }
+        
+        return {
+          key: audio.key,
+          type: 'audio' as const,
+          src: audio.src(),
+          playbackRate:
+            typeof audio.playbackRate === 'function'
+              ? audio.playbackRate()
+              : audio.playbackRate,
+          volume: audio.getVolume(),
+          currentTime: currentTime,
+          duration: duration,
+        };
+      }),
     );
 
     return returnObjects;

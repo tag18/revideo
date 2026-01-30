@@ -47,13 +47,25 @@ export class Lottie extends Rect {
   protected currentTime: number = 0;
   protected lastTime: number = 0;
   private lottieLib: LottiePlayer | null = null;
+  private timeOffset: number = 0;
 
   public constructor(props: LottieProps) {
     super(props);
 
+    // Time starts from when the Lottie node is constructed
+    // timeOffset allows restart() to reset the animation
     const time = useThread().time;
-    const start = time();
-    this.time(() => time() - start);
+    this.timeOffset = time();
+    this.time(() => time() - this.timeOffset);
+  }
+
+  /**
+   * Restart the animation from frame 0.
+   * Resets the internal time so animation plays from the beginning.
+   */
+  public restart() {
+    const time = useThread().time;
+    this.timeOffset = time();
   }
 
   @computed()

@@ -125,9 +125,13 @@ export function ffmpegBridgePlugin({output}: ExporterPluginConfig): Plugin {
  * @remarks
  * This class lets the client exporter invoke methods on the server and receive
  * responses using a simple Promise-based API.
+ *
+ * Multi-worker support: Each worker gets its own FFmpegExporterServer instance,
+ * keyed by hiddenFolderId to avoid race conditions.
  */
 export class FFmpegBridge {
-  private process: FFmpegExporterServer | null = null;
+  // Map from hiddenFolderId to FFmpegExporterServer for multi-worker support
+  private processes: Map<string, FFmpegExporterServer> = new Map();
 
   public constructor(
     private readonly ws: WebSocketServer,
@@ -136,38 +140,47 @@ export class FFmpegBridge {
     ws.on('revideo:ffmpeg-exporter', this.handleMessage);
   }
 
+  private getProcessId(data: any): string {
+    // Use hiddenFolderId as unique identifier for each worker's process
+    return (data as FFmpegExporterSettings)?.hiddenFolderId ?? 'default';
+  }
+
   private handleMessage = async ({method, data}: BrowserRequest) => {
+    const processId = this.getProcessId(data);
+
     if (method === 'start') {
       try {
-        this.process = new FFmpegExporterServer({
+        const process = new FFmpegExporterServer({
           ...(data as FFmpegExporterSettings),
           ...this.config,
         });
-        this.respondSuccess(method, await this.process.start());
+        this.processes.set(processId, process);
+        this.respondSuccess(method, await process.start());
       } catch (e: any) {
         this.respondError(method, e?.message);
       }
       return;
     }
 
-    if (!this.process) {
-      this.respondError(method, 'The exporting process has not been started.');
+    const process = this.processes.get(processId);
+    if (!process) {
+      this.respondError(method, `The exporting process has not been started. (processId: ${processId})`);
       return;
     }
 
-    if (!(method in this.process)) {
+    if (!(method in process)) {
       this.respondError(method, `Unknown method: "${method}".`);
       return;
     }
 
     try {
-      this.respondSuccess(method, await (this.process as any)[method](data));
+      this.respondSuccess(method, await (process as any)[method](data));
     } catch (e: any) {
       this.respondError(method, e?.message);
     }
 
     if (method === 'kill') {
-      this.process = null;
+      this.processes.delete(processId);
       return;
     }
   };

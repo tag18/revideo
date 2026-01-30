@@ -5,6 +5,7 @@ import type {
 } from '@revideo/core';
 import {EventName, sendEvent} from '@revideo/telemetry';
 import * as ffmpeg from 'fluent-ffmpeg';
+import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import {ImageStream} from './image-stream';
@@ -51,6 +52,12 @@ export class FFmpegExporterServer {
       os.tmpdir(),
       `revideo-${this.settings.name}-${settings.hiddenFolderId}`,
     );
+
+    // Create the job folder if it doesn't exist
+    if (!fs.existsSync(this.jobFolder)) {
+      fs.mkdirSync(this.jobFolder, {recursive: true});
+    }
+
     this.stream = new ImageStream();
 
     ffmpeg.setFfmpegPath(ffmpegSettings.getFfmpegPath());
@@ -87,12 +94,14 @@ export class FFmpegExporterServer {
     this.command.run();
   }
 
-  public async handleFrame({data}: {data: string}) {
+  public async handleFrame({data}: {data: string; hiddenFolderId?: string}) {
     const base64Data = data.slice(data.indexOf(',') + 1);
     this.stream.pushImage(Buffer.from(base64Data, 'base64'));
   }
 
-  public async end(result: RendererResult) {
+  public async end(payload: RendererResult | {result: RendererResult; hiddenFolderId?: string}) {
+    // Support both old format (just result) and new format (object with result)
+    const result = typeof payload === 'object' && 'result' in payload ? payload.result : payload;
     this.stream.pushImage(null);
     if (result === 1) {
       try {
@@ -106,7 +115,7 @@ export class FFmpegExporterServer {
     }
   }
 
-  public async kill() {
+  public async kill(_payload?: {hiddenFolderId?: string}) {
     try {
       this.command.kill('SIGKILL');
       await this.promise;

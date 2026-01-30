@@ -99,6 +99,7 @@ export class FFmpegExporterClient implements Exporter {
     const dataUrl = await this.blobToDataUrl(blob);
     await this.invoke('handleFrame', {
       data: dataUrl,
+      hiddenFolderId: this.settings.hiddenFolderId,
     });
   }
 
@@ -112,7 +113,7 @@ export class FFmpegExporterClient implements Exporter {
   }
 
   public async stop(result: RendererResult): Promise<void> {
-    await this.invoke('end', result);
+    await this.invoke('end', {result, hiddenFolderId: this.settings.hiddenFolderId});
     await fetch('/revideo-ffmpeg-decoder/finished', {
       method: 'POST',
       headers: {
@@ -124,7 +125,7 @@ export class FFmpegExporterClient implements Exporter {
   }
 
   public async kill(): Promise<void> {
-    await this.invoke('kill', {});
+    await this.invoke('kill', {hiddenFolderId: this.settings.hiddenFolderId});
   }
 
   public async downloadVideos(assets: AssetInfo[][]): Promise<void> {

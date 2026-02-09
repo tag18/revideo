@@ -274,25 +274,45 @@ function rotatePolygon(polygon: PolygonProfile, reference: PolygonProfile) {
     );
     if (reversedDistance < originalDistance) polygon.points = reversedPoints;
   } else {
+    // For closed polygons, try both normal and reversed directions
+    // to find the best match (prevents flip/distortion during morph)
+    const last = points.pop();
+    const workingLen = points.length; // Length after removing duplicate closing point
+
+    // Try normal direction with all rotations
     let minDistance = Infinity;
     let bestOffset = 0;
-    const last = points.pop();
+    let shouldReverse = false;
 
-    // Closed polygon first point must equal last point
-    // When we rotate polygon, first point is changed which mean last point also must changed
-    // When we remove last point, calculateLerpDistance will assume last point is equal first point
-    // Proof:
-    // len = points.length = reference.length - 1
-    // When i = 0:
-    // (offset + i) % len = offset % len
-    // When i = reference.length - 1 or i = len
-    // (offset + i) % len = (offset + len) % len = offset % len
-
-    for (let offset = 0; offset < len; offset += 1) {
+    for (let offset = 0; offset < workingLen; offset += 1) {
       const distance = calculateLerpDistance(points, reference.points, offset);
       if (distance < minDistance) {
         minDistance = distance;
         bestOffset = offset;
+        shouldReverse = false;
+      }
+    }
+
+    // Try reversed direction with all rotations
+    const reversedPoints = [...points].reverse();
+    for (let offset = 0; offset < workingLen; offset += 1) {
+      const distance = calculateLerpDistance(
+        reversedPoints,
+        reference.points,
+        offset,
+      );
+      if (distance < minDistance) {
+        minDistance = distance;
+        bestOffset = offset;
+        shouldReverse = true;
+      }
+    }
+
+    // Apply the best transformation
+    if (shouldReverse) {
+      // Replace points with reversed version
+      for (let i = 0; i < workingLen; i++) {
+        points[i] = reversedPoints[i];
       }
     }
 

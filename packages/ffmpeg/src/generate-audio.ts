@@ -32,6 +32,11 @@ interface MediaAsset {
   volume: number;
   trimLeftInSeconds: number;
   durationInSeconds: number;
+  /**
+   * Whether the audio is looping.
+   * Looping audio uses frame-based duration calculation and aloop filter.
+   */
+  loop?: boolean;
 }
 
 const SAMPLE_RATE = 48000;
@@ -41,6 +46,8 @@ function getAssetPlacement(frames: AssetInfo[][]): MediaAsset[] {
 
   // A map to keep track of the first and last currentTime for each asset.
   const assetTimeMap = new Map<string, {start: number; end: number}>();
+  // A map to track if the asset is looping
+  const assetLoopMap = new Map<string, boolean>();
 
   for (let frame = 0; frame < frames.length; frame++) {
     for (const asset of frames[frame]) {
@@ -50,6 +57,7 @@ function getAssetPlacement(frames: AssetInfo[][]): MediaAsset[] {
           start: asset.currentTime,
           end: asset.currentTime,
         });
+        assetLoopMap.set(asset.key, asset.loop ?? false);
         assets.push({
           key: asset.key,
           src: asset.src,
@@ -61,6 +69,7 @@ function getAssetPlacement(frames: AssetInfo[][]): MediaAsset[] {
           playbackRate: asset.playbackRate,
           volume: asset.volume,
           trimLeftInSeconds: asset.currentTime,
+          loop: asset.loop,
         });
       } else {
         // If the asset is already in the map, update the end time.
@@ -81,13 +90,23 @@ function getAssetPlacement(frames: AssetInfo[][]): MediaAsset[] {
   // Calculate the duration based on frame count and durationInSeconds based on currentTime.
   assets.forEach(asset => {
     const timeInfo = assetTimeMap.get(asset.key);
+    const isLooping = assetLoopMap.get(asset.key) ?? false;
     // Recalculate the original duration based on frame count.
     asset.duration = asset.endInVideo - asset.startInVideo + 1;
     
     if (timeInfo) {
-      // Calculate durationInSeconds based on the start and end currentTime values.
-      asset.durationInSeconds =
-        (timeInfo.end - timeInfo.start) / asset.playbackRate;
+      // For looping audio, currentTime wraps around (e.g., 135s -> 0s -> 5s),
+      // so we cannot use currentTime difference to calculate duration.
+      // Instead, use Infinity to let prepareAudio calculate from frame count.
+      if (isLooping) {
+        asset.durationInSeconds = Infinity;
+        // Keep trimLeftInSeconds as-is (the first frame's currentTime, which may be wrapped)
+        // prepareAudio will use global startFrame to calculate correct position
+      } else {
+        // Calculate durationInSeconds based on the start and end currentTime values.
+        asset.durationInSeconds =
+          (timeInfo.end - timeInfo.start) / asset.playbackRate;
+      }
     }
     
     // WORKAROUND: If currentTime didn't change (stuck at 0), the Audio was created
@@ -140,12 +159,24 @@ async function prepareAudio(
   const sanitizedKey = asset.key.replace(/[/[\]]/g, '-');
   const outputPath = path.join(tempDir, `${sanitizedKey}.wav`);
 
+  // For looping audio, we need to ensure enough audio to cover the duration
+  const needsLooping = asset.loop && asset.durationInSeconds === Infinity;
+  
+  // trimLeftInSeconds is the currentTime at the first frame where this audio appears.
+  // For looping audio, currentTime wraps around (e.g., at 14s loop point, 16s becomes 2s).
+  // This wrapped value is CORRECT for where to start reading in the looped audio,
+  // because we use aloop to extend the audio, and the wrapped position is the actual
+  // position within each loop iteration.
   const trimLeft = asset.trimLeftInSeconds / asset.playbackRate;
+  
+  // Calculate the required duration in seconds for this worker's portion
+  const requiredDurationInSeconds = (endFrame - startFrame) / fps;
+  
   const trimRight =
     1 / fps +
     Math.min(
       trimLeft + asset.durationInSeconds,
-      trimLeft + (endFrame - startFrame) / fps,
+      trimLeft + requiredDurationInSeconds,
     );
   const padStart = (asset.startInVideo / fps) * 1000;
   const assetSampleRate = await getSampleRate(
@@ -163,20 +194,32 @@ async function prepareAudio(
   const resolvedPath = resolvePath(outputDir, asset.src);
 
   await new Promise<void>((resolve, reject) => {
-    const audioFilters = [
-      ...atempoFilters,
-      `atrim=start=${trimLeft}:end=${trimRight}`,
-      `apad=pad_len=${padEnd}`,
-      `adelay=${padStart}|${padStart}|${padStart}`,
-      `volume=${asset.volume}`,
-    ].join(',');
+    const audioFilters: string[] = [];
+    
+    // For looping audio, use aloop filter to repeat the audio
+    // aloop: loop=-1 means infinite, size is number of samples to loop (use large value)
+    // We calculate loops needed based on required duration AND trimLeft offset
+    if (needsLooping) {
+      // Need enough loops to cover: trimLeft + requiredDuration
+      // Use a generous estimate to ensure we have enough audio
+      const totalDurationNeeded = trimLeft + requiredDurationInSeconds + 5; // +5s buffer
+      const estimatedAudioLength = 10; // Conservative estimate for short audio files
+      const loopCount = Math.ceil(totalDurationNeeded / estimatedAudioLength) + 2;
+      audioFilters.push(`aloop=loop=${loopCount}:size=2e+09`);
+    }
+    
+    audioFilters.push(...atempoFilters);
+    audioFilters.push(`atrim=start=${trimLeft}:end=${trimRight}`);
+    audioFilters.push(`apad=pad_len=${padEnd}`);
+    audioFilters.push(`adelay=${padStart}|${padStart}|${padStart}`);
+    audioFilters.push(`volume=${asset.volume}`);
 
     ffmpeg.setFfmpegPath(ffmpegSettings.getFfmpegPath());
     ffmpeg(resolvedPath)
       .audioChannels(2)
       .audioCodec('pcm_s16le')
       .audioFrequency(SAMPLE_RATE)
-      .outputOptions([`-af`, audioFilters])
+      .outputOptions([`-af`, audioFilters.join(',')])
       .on('end', () => {
         resolve();
       })

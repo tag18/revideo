@@ -248,6 +248,7 @@ export class Scene2D extends GeneratorScene<View2D> implements Inspectable {
       ...playingAudios.map(audio => {
         const currentTime = audio.getCurrentTime();
         const duration = audio.getDuration();
+        const isLooping = audio.loop();
         
         return {
           key: audio.key,
@@ -260,6 +261,7 @@ export class Scene2D extends GeneratorScene<View2D> implements Inspectable {
           volume: audio.getVolume(),
           currentTime: currentTime,
           duration: duration,
+          loop: isLooping,
         };
       }),
     );

@@ -37,6 +37,11 @@ export interface AssetInfo {
   currentTime: number;
   duration: number;
   decoder?: string | null;
+  /**
+   * Whether the media is set to loop.
+   * Used by audio renderer to handle looping audio correctly.
+   */
+  loop?: boolean;
 }
 
 export enum RendererState {

@@ -205,6 +205,9 @@ export abstract class Media extends Rect {
         `volumes cannot be negative - the value will be clamped to 0.`,
       );
     }
+    // Update instance volume so getVolume() returns the new value
+    this.volume = Math.max(volume, 0);
+    
     const media = this.mediaElement();
     media.volume = Math.min(Math.max(volume, 0), 1);
 

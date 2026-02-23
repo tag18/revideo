@@ -335,7 +335,7 @@ async function mergeAudioTracks(
 
     command
       .complexFilter([
-        `amix=inputs=${audioFilenames.length}:duration=longest,volume=${audioFilenames.length}`,
+        `amix=inputs=${audioFilenames.length}:duration=longest:normalize=0`,
       ])
       .outputOptions(['-c:a', 'pcm_s16le'])
       .on('end', () => {

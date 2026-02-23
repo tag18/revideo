@@ -11,6 +11,7 @@ export interface TTSAudioProps extends Omit<MediaProps, 'src'> {
   voice?: SignalValue<string>;
   rate?: SignalValue<string>;
   pitch?: SignalValue<string>;
+  style?: SignalValue<string>;
   fileName?: string;
 }
 
@@ -109,6 +110,7 @@ export class TTSAudio extends Audio {
   private _ttsVoice?: SignalValue<string>;
   private _ttsRate?: SignalValue<string>;
   private _ttsPitch?: SignalValue<string>;
+  private _ttsStyle?: SignalValue<string>;
   private _projectName: string = 'default';
 
   private static formatRateAndPitch(value: string | undefined): string {
@@ -132,7 +134,7 @@ export class TTSAudio extends Audio {
     }
   }
 
-  private static async generateTTSStatic(text: string, voice: string, rate: string, pitch: string, projectName: string, fileName?: string): Promise<{audioPath: string; wordBoundaries: WordBoundary[]; duration: number}> {
+  private static async generateTTSStatic(text: string, voice: string, rate: string, pitch: string, projectName: string, fileName?: string, style?: string): Promise<{audioPath: string; wordBoundaries: WordBoundary[]; duration: number}> {
     // Validate inputs
     if (!text || typeof text !== 'string') {
       throw new Error(`Invalid text parameter: ${text}`);
@@ -142,16 +144,17 @@ export class TTSAudio extends Audio {
     }
     
     // Convert rate and pitch to proper format
-    console.log('🎤 TTS Input params:', { text, voice, rate, pitch, projectName, fileName });
+    console.log('🎤 TTS Input params:', { text, voice, rate, pitch, style, projectName, fileName });
     const rateFormatted = TTSAudio.formatRateAndPitch(rate);
     const pitchFormatted = TTSAudio.formatRateAndPitch(pitch);
     
-    const requestBody = {
+    const requestBody: any = {
       text: text.trim(), // Ensure no extra whitespace
       config: {
         voice: voice,
         rate: rateFormatted,
         pitch: pitchFormatted,
+        ...(style ? { style } : {}),
       },
       projectName: projectName,
       fileName: fileName,
@@ -201,7 +204,7 @@ export class TTSAudio extends Audio {
 
   public constructor(props: TTSAudioProps) {
     // Extract TTS props
-    const {text, voice, rate, pitch, fileName, ...audioProps} = props;
+    const {text, voice, rate, pitch, style, fileName, ...audioProps} = props;
     
     super({src: undefined, ...audioProps}); // src: undefined, avoid loading invalid src
     
@@ -224,6 +227,7 @@ export class TTSAudio extends Audio {
     this._ttsVoice = voice ?? projectDefaults.voice ?? 'en-US-AriaNeural';
     this._ttsRate = rate ?? projectDefaults.rate ?? 'medium';
     this._ttsPitch = pitch ?? projectDefaults.pitch ?? 'medium';
+    this._ttsStyle = style ?? projectDefaults.style;
     // Use configured projectName, or fallback to scene name
     this._projectName = projectDefaults.projectName ?? sceneName;
     this._fileName = fileName;
@@ -261,15 +265,16 @@ export class TTSAudio extends Audio {
     const voiceValue = this.evaluateSignal(this._ttsVoice);
     const rateValue = this.evaluateSignal(this._ttsRate);
     const pitchValue = this.evaluateSignal(this._ttsPitch);
+    const styleValue = this.evaluateSignal(this._ttsStyle);
     
     // Validate parameters
     if (textValue && typeof textValue === 'string') {
       // Start TTS generation immediately
-      const ttsKey = `${textValue}/${voiceValue}/${rateValue}/${pitchValue}`;
+      const ttsKey = `${textValue}/${voiceValue}/${rateValue}/${pitchValue}/${styleValue || ''}`;
       this.currentTtsKey = ttsKey;
       
       console.log('🎤 TTSAudio: Starting TTS generation...');
-      console.log('🎤 TTS params:', { text: textValue, voice: voiceValue, rate: rateValue, pitch: pitchValue });
+      console.log('🎤 TTS params:', { text: textValue, voice: voiceValue, rate: rateValue, pitch: pitchValue, style: styleValue });
       
       // Start or get existing TTS generation Promise
       if (!TTSAudio.ttsGenerationPromises[ttsKey]) {
@@ -279,7 +284,8 @@ export class TTSAudio extends Audio {
           rateValue,
           pitchValue,
           this._projectName,
-          this._fileName
+          this._fileName,
+          styleValue,
         );
       }
       
@@ -413,13 +419,14 @@ export class TTSAudio extends Audio {
     const voiceValue = this.evaluateSignal(this._ttsVoice);
     const rateValue = this.evaluateSignal(this._ttsRate);
     const pitchValue = this.evaluateSignal(this._ttsPitch);
+    const styleValue = this.evaluateSignal(this._ttsStyle);
 
     // Validate parameters
     if (!textValue || typeof textValue !== 'string') {
       return this.cachedAudioNode;
     }
 
-    const ttsKey = `${textValue}/${voiceValue}/${rateValue}/${pitchValue}`;
+    const ttsKey = `${textValue}/${voiceValue}/${rateValue}/${pitchValue}/${styleValue || ''}`;
 
     // If key is the same, return directly
     if (this.currentTtsKey === ttsKey) {
@@ -437,7 +444,9 @@ export class TTSAudio extends Audio {
         voiceValue,
         rateValue,
         pitchValue,
-        this._projectName
+        this._projectName,
+        undefined,
+        styleValue,
       );
     }
 

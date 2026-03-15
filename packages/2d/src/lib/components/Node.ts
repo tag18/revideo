@@ -568,9 +568,14 @@ export class Node implements Promisable<Node> {
   @computed()
   public localToWorld(): DOMMatrix {
     const parent = this.parent();
-    return parent
-      ? parent.localToWorld().multiply(this.localToParent())
-      : this.localToParent();
+    if (!parent) return this.localToParent();
+    try {
+      return parent.localToWorld().multiply(this.localToParent());
+    } catch {
+      // DOMMatrixReadOnly.multiply can throw when NaN values create
+      // inconsistent is2D flags. Fall back to local-only transform.
+      return this.localToParent();
+    }
   }
 
   /**
@@ -650,9 +655,13 @@ export class Node implements Promisable<Node> {
   public compositeToLocal() {
     const root = this.compositeRoot();
     if (root) {
-      const worldToLocal = this.worldToLocal();
-      worldToLocal.m44 = 1;
-      return root.localToWorld().multiply(worldToLocal);
+      try {
+        const worldToLocal = this.worldToLocal();
+        worldToLocal.m44 = 1;
+        return root.localToWorld().multiply(worldToLocal);
+      } catch {
+        return new DOMMatrix();
+      }
     }
     return new DOMMatrix();
   }

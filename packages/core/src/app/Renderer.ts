@@ -332,6 +332,10 @@ export class Renderer {
         }
       }
     } catch (e: any) {
+      // Log full stack trace for debugging render crashes
+      if (e && e.stack) {
+        console.error('[Renderer] FULL STACK TRACE:', e.stack);
+      }
       this.project.logger.error(e);
       result = RendererResult.Error;
     }

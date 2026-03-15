@@ -5,7 +5,6 @@ import {v4 as uuidv4} from 'uuid';
 
 /**
  * Extract a default output filename from the project file path.
- * e.g., './src/products/巨鹿之战/julu.tsx' → 'julu'
  */
 function getDefaultOutputName(projectFile: string): string {
   const basename = path.basename(projectFile);

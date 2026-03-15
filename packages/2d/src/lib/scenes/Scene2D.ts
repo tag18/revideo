@@ -134,21 +134,29 @@ export class Scene2D extends GeneratorScene<View2D> implements Inspectable {
 
         if (parentCameras.length > 0) {
           for (const camera of parentCameras) {
-            const cameraParent = camera.parent();
-            const cameraParentToWorld = cameraParent ? cameraParent.localToWorld() : new DOMMatrix();
-            const cameraLocalToParent = camera.localToParent().inverse();
-            const nodeLocalToWorld = node.localToWorld();
+            try {
+              const cameraParent = camera.parent();
+              const cameraParentToWorld = cameraParent ? cameraParent.localToWorld() : new DOMMatrix();
+              const cameraLocalToParent = camera.localToParent().inverse();
+              const nodeLocalToWorld = node.localToWorld();
 
-            node.drawOverlay(
-              context,
-              matrix
-                .multiply(cameraParentToWorld)
-                .multiply(cameraLocalToParent)
-                .multiply(nodeLocalToWorld),
-            );
+              node.drawOverlay(
+                context,
+                matrix
+                  .multiply(cameraParentToWorld)
+                  .multiply(cameraLocalToParent)
+                  .multiply(nodeLocalToWorld),
+              );
+            } catch {
+              // DOMMatrixReadOnly.multiply can throw on NaN-corrupted matrices
+            }
           }
         } else {
-          node.drawOverlay(context, matrix.multiply(node.localToWorld()));
+          try {
+            node.drawOverlay(context, matrix.multiply(node.localToWorld()));
+          } catch {
+            // DOMMatrixReadOnly.multiply can throw on NaN-corrupted matrices
+          }
         }
       });
     }

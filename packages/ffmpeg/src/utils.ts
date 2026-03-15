@@ -16,7 +16,9 @@ export function resolvePath(output: string, assetPath: string) {
   ) {
     resolvedPath = assetPath;
   } else {
-    resolvedPath = path.join(output, '../public', assetPath);
+    // Always resolve relative to project root's public/ directory,
+    // not relative to outDir (which may be nested like output/product/video-zh/)
+    resolvedPath = path.join(process.cwd(), 'public', assetPath);
   }
   return resolvedPath;
 }

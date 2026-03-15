@@ -64,13 +64,15 @@ export function* join(
     while (threads.find(thread => !thread.canceled)) {
       yield;
     }
-    childTime = Math.max(...threads.map(thread => thread.time()));
+    const times = threads.map(thread => thread.time()).filter(t => !isNaN(t));
+    childTime = times.length > 0 ? Math.max(...times) : parent.fixed;
   } else {
     while (!threads.find(thread => thread.canceled)) {
       yield;
     }
     const canceled = threads.filter(thread => thread.canceled);
-    childTime = Math.min(...canceled.map(thread => thread.time()));
+    const times = canceled.map(thread => thread.time()).filter(t => !isNaN(t));
+    childTime = times.length > 0 ? Math.min(...times) : parent.fixed;
   }
 
   parent.time(Math.max(startTime, childTime));

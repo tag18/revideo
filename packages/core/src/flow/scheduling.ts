@@ -52,7 +52,10 @@ export function* waitFor(
   const thread = useThread();
   const step = usePlayback().framesToSeconds(1);
 
-  const targetTime = thread.time() + seconds;
+  // Guard against NaN thread time (can occur when audio metadata isn't loaded)
+  const currentTime = thread.time();
+  const safeTime = isNaN(currentTime) ? thread.fixed : currentTime;
+  const targetTime = safeTime + seconds;
   // subtracting the step is not necessary, but it keeps the thread time ahead
   // of the project time.
   while (targetTime - step > thread.fixed) {

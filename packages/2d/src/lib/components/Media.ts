@@ -121,7 +121,8 @@ export abstract class Media extends Rect {
   }
 
   public getDuration(): number {
-    return this.mediaElement().duration;
+    const duration = this.mediaElement().duration;
+    return isNaN(duration) ? 0 : duration;
   }
 
   public getVolume(): number {

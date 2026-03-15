@@ -58,10 +58,15 @@ export class VoiceoverTracker {
 
   /**
    * Get remaining time until audio finishes
-   * Returns full duration if audio hasn't started
+   * Returns full duration if audio hasn't started or if elapsed time is NaN
+   * (NaN can occur when the underlying audio element hasn't loaded metadata yet)
    */
   get remainingTime(): number {
-    const remaining = this.duration - this.elapsedTime;
+    const elapsed = this.elapsedTime;
+    if (isNaN(elapsed)) {
+      return this.duration;
+    }
+    const remaining = this.duration - elapsed;
     return Math.max(0, remaining);
   }
 

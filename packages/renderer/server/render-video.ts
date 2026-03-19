@@ -111,7 +111,11 @@ export async function initBrowserAndServer(
   hmr: boolean = false,
 ) {
   const args = settings.puppeteer?.args ?? [];
-  args.includes('--single-process') || args.push('--single-process');
+  // --single-process is unstable on Windows with Web Workers (e.g. MapLibre GL),
+  // causing "Navigating frame was detached" errors. Only enable on non-Windows.
+  if (process.platform !== 'win32') {
+    args.includes('--single-process') || args.push('--single-process');
+  }
 
   const resolvedProjectPath = path.join(process.cwd(), projectFile);
   

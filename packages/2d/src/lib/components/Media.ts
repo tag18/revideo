@@ -364,6 +364,14 @@ ${new Error().stack}
 
   public clampTime(time: number): number {
     const duration = this.getDuration();
+
+    // Guard: if media metadata hasn't loaded yet (duration=0 or NaN), return 0
+    // to avoid NaN from modulo-by-zero when looping.
+    // Using !(duration > 0) handles 0, negative, NaN, and Infinity correctly.
+    if (!(duration > 0)) {
+      return 0;
+    }
+
     const startTime = this.startTime();
 
     // Support negative endTime (e.g., -5 means duration - 5)
@@ -374,6 +382,11 @@ ${new Error().stack}
     endTime = Math.min(endTime, duration);
 
     const effectiveDuration = endTime - startTime;
+
+    // Guard against zero or negative effective duration
+    if (effectiveDuration <= 0) {
+      return startTime;
+    }
 
     if (this.loop()) {
       // Loop within the startTime-endTime range

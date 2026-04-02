@@ -380,15 +380,20 @@ export async function generateAudio({
     }
 
     if (asset.playbackRate !== 0 && asset.volume !== 0 && hasAudioStream) {
-      const filename = await prepareAudio(
-        outputDir,
-        fullTempDir,
-        asset,
-        startFrame,
-        endFrame,
-        fps,
-      );
-      audioFilenames.push(filename);
+      try {
+        const filename = await prepareAudio(
+          outputDir,
+          fullTempDir,
+          asset,
+          startFrame,
+          endFrame,
+          fps,
+        );
+        audioFilenames.push(filename);
+      } catch (err) {
+        console.error(`Failed to process audio asset: key=${asset.key}, src=${asset.src}, type=${asset.type}`, err);
+        throw err;
+      }
     }
   }
 

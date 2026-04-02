@@ -6,10 +6,8 @@ import type {FfmpegSettings} from '@revideo/ffmpeg';
 import {
   audioCodecs,
   concatenateMedia,
-  createSilentAudioFile,
   doesFileExist,
   extensions,
-  getVideoDuration,
   mergeAudioWithVideo,
 } from '@revideo/ffmpeg';
 import {EventName, sendEvent} from '@revideo/telemetry';
@@ -348,7 +346,6 @@ async function initializeBrowserAndStartRendering(
 
 /**
  * Collects audio and video files from each worker and returns them.
- * If audio file does not exist, creates a silent audio file with the same duration as the video file.
  */
 async function collectAudioAndVideoFiles(
   numOfWorkers: number,
@@ -358,16 +355,24 @@ async function collectAudioAndVideoFiles(
 ) {
   const audioFiles = [];
   const videoFiles = [];
+  const missingAudio = [];
   for (let i = 0; i < numOfWorkers; i++) {
     const videoFilePath = `${os.tmpdir()}/revideo-${outputFileName}-${i}-${hiddenFolderId}/visuals.${extensions[format]}`;
     const audioFilePath = `${os.tmpdir()}/revideo-${outputFileName}-${i}-${hiddenFolderId}/audio.wav`;
 
     if (!(await doesFileExist(audioFilePath))) {
-      const videoDuration = await getVideoDuration(videoFilePath);
-      await createSilentAudioFile(audioFilePath, videoDuration);
+      missingAudio.push({worker: i, path: audioFilePath});
     }
     videoFiles.push(videoFilePath);
     audioFiles.push(audioFilePath);
+  }
+
+  if (missingAudio.length > 0) {
+    const details = missingAudio.map(m => `  Worker ${m.worker}: ${m.path}`).join('\n');
+    throw new Error(
+      `Audio generation failed: audio.wav not found for ${missingAudio.length} worker(s).\n` +
+      `This usually means ffmpeg failed during audio processing. Check the logs above for errors.\n${details}`
+    );
   }
 
   return {audioFiles, videoFiles};
@@ -580,8 +585,11 @@ export const renderPartialVideo = async ({
   const audioFilePath = `${os.tmpdir()}/revideo-${outputFileName}-${workerId}-${hiddenFolderId}/audio.wav`;
 
   if (!(await doesFileExist(audioFilePath))) {
-    const videoDuration = await getVideoDuration(videoFilePath);
-    await createSilentAudioFile(audioFilePath, videoDuration);
+    throw new Error(
+      `Audio generation failed: audio.wav not found for worker ${workerId}.\n` +
+      `Expected path: ${audioFilePath}\n` +
+      `This usually means ffmpeg failed during audio processing. Check the logs above for errors.`
+    );
   }
 
   return {audioFile: audioFilePath, videoFile: videoFilePath};

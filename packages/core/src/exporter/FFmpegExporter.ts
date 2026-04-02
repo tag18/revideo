@@ -137,7 +137,7 @@ export class FFmpegExporterClient implements Exporter {
     startFrame: number,
     endFrame: number,
   ): Promise<void> {
-    await fetch('/audio-processing/generate-audio', {
+    const response = await fetch('/audio-processing/generate-audio', {
       method: 'POST',
       body: JSON.stringify({
         tempDir: `revideo-${this.settings.name}-${this.settings.hiddenFolderId}`,
@@ -147,6 +147,9 @@ export class FFmpegExporterClient implements Exporter {
         fps: this.settings.fps,
       }),
     });
+    if (!response.ok) {
+      throw new Error(`Audio generation failed (HTTP ${response.status})`);
+    }
   }
 
   public async mergeMedia(): Promise<void> {
@@ -154,7 +157,7 @@ export class FFmpegExporterClient implements Exporter {
     const tempDir = `revideo-${this.settings.name}-${this.settings.hiddenFolderId}`;
     const format = this.exporterOptions.format;
 
-    await fetch('/audio-processing/merge-media', {
+    const response = await fetch('/audio-processing/merge-media', {
       method: 'POST',
       body: JSON.stringify({
         outputFilename,
@@ -162,6 +165,9 @@ export class FFmpegExporterClient implements Exporter {
         format,
       }),
     });
+    if (!response.ok) {
+      throw new Error(`Media merge failed (HTTP ${response.status})`);
+    }
   }
 
   /**

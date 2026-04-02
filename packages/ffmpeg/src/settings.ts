@@ -1,5 +1,5 @@
-import * as ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
-import * as ffprobeInstaller from '@ffprobe-installer/ffprobe';
+import ffmpegPath = require('ffmpeg-static');
+import {path as ffprobePath} from 'ffprobe-static';
 
 const ffmpegLogLevels = [
   'quiet',
@@ -27,8 +27,8 @@ class FfmpegSettingState {
   private logLevel: LogLevel;
 
   public constructor() {
-    this.ffmpegPath = ffmpegInstaller.path as unknown as string;
-    this.ffprobePath = ffprobeInstaller.path as unknown as string;
+    this.ffmpegPath = ffmpegPath as unknown as string;
+    this.ffprobePath = ffprobePath as unknown as string;
 
     // Use the FFMPEG_PATH environment variable if it is set
     if (process.env.FFMPEG_PATH) {

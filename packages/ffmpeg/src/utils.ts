@@ -38,6 +38,8 @@ export async function concatenateMedia(
   files: string[],
   outputFile: string,
 ): Promise<void> {
+  console.log(`[ffmpeg] concatenateMedia: ${files.length} files → ${outputFile}`);
+  const startTime = Date.now();
   const tempFile = path.join(os.tmpdir(), `${uuidv4()}.txt`);
   const fileContent = files
     .map(file => `file '${file.replace(/'/g, "\\'")}'`)
@@ -57,11 +59,12 @@ export async function concatenateMedia(
       ])
       .outputOptions(['-c copy'])
       .on('error', err => {
-        console.error('Error:', err);
+        console.error(`[ffmpeg] concatenateMedia error after ${Date.now() - startTime}ms:`, err);
         fs.promises.unlink(tempFile).catch(console.error);
         reject(err); // Reject the promise on error
       })
       .on('end', () => {
+        console.log(`[ffmpeg] concatenateMedia done in ${Date.now() - startTime}ms → ${outputFile}`);
         fs.promises.unlink(tempFile).catch(console.error);
         resolve(); // Resolve the promise on successful completion
       })
@@ -151,6 +154,8 @@ export async function mergeAudioWithVideo(
   audioCodec: AudioCodec = 'aac',
 ): Promise<void> {
   ffmpeg.setFfmpegPath(ffmpegSettings.getFfmpegPath());
+  console.log(`[ffmpeg] mergeAudioWithVideo: ${videoPath} + ${audioPath} → ${outputPath}`);
+  const startTime = Date.now();
 
   return new Promise((resolve, reject) => {
     ffmpeg()
@@ -165,10 +170,11 @@ export async function mergeAudioWithVideo(
         'experimental',
       ])
       .on('end', () => {
+        console.log(`[ffmpeg] mergeAudioWithVideo done in ${Date.now() - startTime}ms → ${outputPath}`);
         resolve();
       })
       .on('error', err => {
-        console.error(`Error merging video and audio: ${err.message}`);
+        console.error(`[ffmpeg] mergeAudioWithVideo error after ${Date.now() - startTime}ms: ${err.message}`);
         reject(err);
       })
       .save(outputPath);

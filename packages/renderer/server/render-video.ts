@@ -201,6 +201,53 @@ function formatTime(ms: number): string {
 }
 
 /**
+ * Close browser and server with a timeout. If browser.close() hangs
+ * (a known Puppeteer issue), force-kill the Chrome process after 15s.
+ */
+const CLEANUP_TIMEOUT_MS = 120_000;
+
+async function gracefulCleanup(
+  workerId: number,
+  browser: Browser,
+  server: ViteDevServer,
+): Promise<void> {
+  const closeWithTimeout = async (label: string, closeFn: () => Promise<void>) => {
+    const start = Date.now();
+    try {
+      await Promise.race([
+        closeFn(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error(`${label} close timed out after ${CLEANUP_TIMEOUT_MS}ms`)), CLEANUP_TIMEOUT_MS),
+        ),
+      ]);
+      console.log(`[render] Worker ${workerId}: ${label} closed in ${Date.now() - start}ms`);
+    } catch (err: any) {
+      console.warn(`[render] Worker ${workerId}: ${label} close failed/timed out (${Date.now() - start}ms): ${err.message}`);
+    }
+  };
+
+  // Close browser — force-kill Chrome if it hangs
+  const browserProcess = browser.process();
+  await closeWithTimeout('browser', async () => {
+    await browser.close();
+  });
+  // If Chrome process is still alive after close attempt, force kill it
+  if (browserProcess && !browserProcess.killed) {
+    try {
+      browserProcess.kill('SIGKILL');
+      console.warn(`[render] Worker ${workerId}: force-killed Chrome process (pid=${browserProcess.pid})`);
+    } catch {
+      // Process may have already exited
+    }
+  }
+
+  // Close Vite server
+  await closeWithTimeout('server', async () => {
+    await server.close();
+  });
+}
+
+/**
  * Navigates to the URL and renders the video on the page
  */
 export async function renderVideoOnPage(
@@ -276,19 +323,23 @@ export async function renderVideoOnPage(
 
   const renderingComplete = new Promise<void>((resolve, reject) => {
     page.exposeFunction('onRenderComplete', async () => {
-      await Promise.all([browser.close(), server.close()]);
+      console.log(`[render] Worker ${id}: onRenderComplete fired, closing browser & server...`);
+      const closeStart = Date.now();
+      await gracefulCleanup(id, browser, server);
+      console.log(`[render] Worker ${id}: cleanup done in ${Date.now() - closeStart}ms`);
       clearInterval(interval);
       resolve();
     });
 
     page.exposeFunction('onRenderFailed', async (errorMessage: string) => {
-      await Promise.all([browser.close(), server.close()]);
-      console.error('Rendering failed:', errorMessage);
+      console.error(`[render] Worker ${id}: onRenderFailed: ${errorMessage}`);
+      await gracefulCleanup(id, browser, server);
       clearInterval(interval);
       reject(new Error(errorMessage));
     });
 
     page.exposeFunction('browserError', (message: string) => {
+      console.error(`[render] Worker ${id}: browserError: ${message}`);
       reject(new Error(message));
     });
   });
@@ -388,20 +439,29 @@ async function concatenateAudioAndVideoFiles(
   videoFiles: string[],
   format: FfmpegExporterOptions['format'],
 ) {
+  console.log(`[render] concatenateAudioAndVideoFiles: ${videoFiles.length} videos, ${audioFiles.length} audios`);
+  const step1Start = Date.now();
   await concatenateMedia(
     videoFiles,
     path.join(outputFolder, `${outputFileName}-visuals.${extensions[format]}`),
   );
+  console.log(`[render] Video concatenation done in ${((Date.now() - step1Start) / 1000).toFixed(1)}s`);
+
+  const step2Start = Date.now();
   await concatenateMedia(
     audioFiles,
     path.join(outputFolder, `${outputFileName}-audio.wav`),
   );
+  console.log(`[render] Audio concatenation done in ${((Date.now() - step2Start) / 1000).toFixed(1)}s`);
+
+  const step3Start = Date.now();
   await mergeAudioWithVideo(
     path.join(outputFolder, `${outputFileName}-audio.wav`),
     path.join(outputFolder, `${outputFileName}-visuals.${extensions[format]}`),
     path.join(outputFolder, `${outputFileName}.${extensions[format]}`),
     audioCodecs[format],
   );
+  console.log(`[render] Audio-video merge done in ${((Date.now() - step3Start) / 1000).toFixed(1)}s`);
 }
 
 /**
@@ -505,15 +565,24 @@ export async function renderVideo({
   }
 
   // Wait for workers to finish rendering
+  console.log(`[render] Waiting for ${numOfWorkers} worker(s) to finish...`);
+  const workersStart = Date.now();
   await Promise.all(renderPromises);
+  console.log(`[render] All ${numOfWorkers} worker(s) finished in ${((Date.now() - workersStart) / 1000).toFixed(1)}s`);
 
   // Collect and concatenate audio and video files
+  console.log('[render] Collecting audio/video files from workers...');
+  const collectStart = Date.now();
   const {audioFiles, videoFiles} = await collectAudioAndVideoFiles(
     numOfWorkers,
     outputFileName,
     hiddenFolderId,
     format,
   );
+  console.log(`[render] Collected ${videoFiles.length} video + ${audioFiles.length} audio files in ${Date.now() - collectStart}ms`);
+
+  console.log('[render] Starting ffmpeg concatenation...');
+  const concatStart = Date.now();
   await concatenateAudioAndVideoFiles(
     outputFileName,
     outputFolderName,
@@ -521,6 +590,9 @@ export async function renderVideo({
     videoFiles,
     format,
   );
+  console.log(`[render] FFmpeg concatenation done in ${((Date.now() - concatStart) / 1000).toFixed(1)}s`);
+
+  console.log('[render] Cleaning up temp files...');
   await cleanup(
     outputFileName,
     outputFolderName,
@@ -528,6 +600,7 @@ export async function renderVideo({
     hiddenFolderId,
     format,
   );
+  console.log('[render] Cleanup done');
 
   const finalOutputPath = path.join(outputFolderName, `${outputFileName}.${extensions[format]}`);
 

@@ -303,12 +303,35 @@ export abstract class Media extends Rect {
       return;
     }
 
-    const onCanPlayWrapper = () => {
+    let settled = false;
+    const settle = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
       onCanPlay();
-      media.removeEventListener('canplay', onCanPlayWrapper);
     };
 
-    const onError = () => {
+    const cleanup = () => {
+      media.removeEventListener('canplay', onCanPlayHandler);
+      media.removeEventListener('error', onErrorHandler);
+      media.removeEventListener('abort', onAbortHandler);
+      if (timeoutId !== undefined) clearTimeout(timeoutId);
+    };
+
+    const onCanPlayHandler = () => {
+      settle();
+    };
+
+    const onAbortHandler = () => {
+      const srcSignal = this.src();
+      console.warn(
+        `[${this.constructor.name}] Media load aborted: ${srcSignal}. ` +
+        `Continuing without waiting (readyState=${media.readyState}).`,
+      );
+      settle();
+    };
+
+    const onErrorHandler = () => {
       const reason = this.getErrorReason(media.error?.code);
       const srcSignal = this.src();
       const mediaSrc = media.src;
@@ -326,11 +349,27 @@ Stack trace:
 ${new Error().stack}
 ======================================================
       `.trim());
-      media.removeEventListener('error', onError);
+      settle();
     };
 
-    media.addEventListener('canplay', onCanPlayWrapper);
-    media.addEventListener('error', onError);
+    // Timeout: if media doesn't load or error within 15 seconds, resolve
+    // anyway to prevent the render pipeline from hanging forever.
+    // This handles cases where net::ERR_ABORTED doesn't fire any DOM event
+    // (common in Chrome --single-process mode).
+    const timeoutId = setTimeout(() => {
+      if (!settled) {
+        const srcSignal = this.src();
+        console.warn(
+          `[${this.constructor.name}] Media load timeout (15s): ${srcSignal}. ` +
+          `readyState=${media.readyState}. Continuing without media.`,
+        );
+        settle();
+      }
+    }, 15000);
+
+    media.addEventListener('canplay', onCanPlayHandler);
+    media.addEventListener('error', onErrorHandler);
+    media.addEventListener('abort', onAbortHandler);
   }
 
   /**

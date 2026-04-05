@@ -71,10 +71,24 @@ export const render = async (
       ] as [number, number],
     };
 
+    console.log(
+      `[renderer-client] Worker ${workerId}: renderer.render start ` +
+        `(requested=${range[0]}s-${range[1]}s, frames=${firstWorkerFrame}-${lastWorkerFrame}, ` +
+        `timeSlice=${combinedSettings.range[0].toFixed(3)}s-${combinedSettings.range[1].toFixed(3)}s)`,
+    );
+
     await renderer.render(combinedSettings);
+    console.log(`[renderer-client] Worker ${workerId}: renderer.render done`);
     window.onRenderComplete();
   } catch (e: any) {
-    window.onRenderFailed(e.message);
+    const message = e?.message ?? String(e);
+    console.error(
+      `[renderer-client] Worker ${workerId}: render failed: ${message}`,
+    );
+    if (e?.stack) {
+      console.error(e.stack);
+    }
+    window.onRenderFailed(message);
   }
 };
 

@@ -101,6 +101,7 @@ function buildUrl(
  * Starts the vite server and creates a puppeteer browser instance
  */
 export async function initBrowserAndServer(
+  workerId: number,
   fixedPort: number,
   projectFile: string,
   outputFolderName: string,
@@ -108,59 +109,73 @@ export async function initBrowserAndServer(
   variables?: Record<string, unknown>,
   hmr: boolean = false,
 ) {
-  const args = settings.puppeteer?.args ?? [];
-  // --single-process is unstable on Windows with Web Workers (e.g. MapLibre GL),
-  // causing "Navigating frame was detached" errors. Only enable on non-Windows.
-  if (process.platform !== 'win32') {
+  const initStart = Date.now();
+  const args = [...(settings.puppeteer?.args ?? [])];
+  // Single-process mode is useful on Linux in some render setups, but it is
+  // unstable with Web Workers and local media on macOS/Windows. That matches
+  // the MapLibre/media ERR_ABORTED + page-close failures seen in videolib.
+  if (process.platform === 'linux') {
     args.includes('--single-process') || args.push('--single-process');
   }
 
   const resolvedProjectPath = path.join(process.cwd(), projectFile);
-  
+  console.log(
+    `[render] Worker ${workerId}: init start ` +
+      `(requestedPort=${fixedPort}, project=${resolvedProjectPath}, output=${outputFolderName})`,
+  );
+
   // Extract plugins from viteConfig to merge them properly
   const {plugins: userPlugins, ...restViteConfig} = settings.viteConfig || {};
-  
-  const [browser, server] = await Promise.all([
-    puppeteer.launch({headless: true, ...settings.puppeteer, args}),
-    createServer({
-      configFile: false,
-      plugins: [
-        motionCanvas({project: resolvedProjectPath, output: outputFolderName}),
-        rendererPlugin(
-          settings.projectSettings,
-          variables,
-          settings.ffmpeg,
-          projectFile,
-        ),
-        imageExporterPlugin({outputPath: outputFolderName}),
-        // Merge user plugins if provided
-        ...(Array.isArray(userPlugins)
-          ? userPlugins
-          : userPlugins
-            ? [userPlugins]
-            : []),
-      ],
-      ...restViteConfig,
-      server: {
-        port: fixedPort,
-        hmr,
-        ...settings.viteServerOptions,
-        ...restViteConfig?.server,
-      },
-    }).then(server => server.listen()),
-  ]);
 
-  if (!server.httpServer) {
-    throw new Error('HTTP server is not initialized');
-  }
-  const address = server.httpServer.address();
-  const resolvedPort =
-    address && typeof address === 'object' ? address.port : null;
-  if (resolvedPort === null) {
-    throw new Error('Server address is null');
-  }
+  try {
+    const [browser, server] = await Promise.all([
+      puppeteer.launch({headless: true, ...settings.puppeteer, args}),
+      createServer({
+        configFile: false,
+        plugins: [
+          motionCanvas({project: resolvedProjectPath, output: outputFolderName}),
+          rendererPlugin(
+            settings.projectSettings,
+            variables,
+            settings.ffmpeg,
+            projectFile,
+          ),
+          imageExporterPlugin({outputPath: outputFolderName}),
+          // Merge user plugins if provided
+          ...(Array.isArray(userPlugins)
+            ? userPlugins
+            : userPlugins
+              ? [userPlugins]
+              : []),
+        ],
+        ...restViteConfig,
+        server: {
+          port: fixedPort,
+          hmr,
+          ...settings.viteServerOptions,
+          ...restViteConfig?.server,
+        },
+      }).then(server => server.listen()),
+    ]);
 
-  return {browser, server, resolvedPort};
+    if (!server.httpServer) {
+      throw new Error('HTTP server is not initialized');
+    }
+    const address = server.httpServer.address();
+    const resolvedPort =
+      address && typeof address === 'object' ? address.port : null;
+    if (resolvedPort === null) {
+      throw new Error('Server address is null');
+    }
+
+    return {browser, server, resolvedPort};
+  } catch (error: any) {
+    console.error(
+      `[render] Worker ${workerId}: init failed after ${Date.now() - initStart}ms: ` +
+        `${error?.stack ?? error?.message ?? String(error)}`,
+    );
+    throw error;
+  }
 }
 
 
@@ -205,6 +220,8 @@ function formatTime(ms: number): string {
  * (a known Puppeteer issue), force-kill the Chrome process after 15s.
  */
 const CLEANUP_TIMEOUT_MS = 120_000;
+const PAGE_GOTO_TIMEOUT_MS = 120_000;
+const NO_PROGRESS_TIMEOUT_MS = 60_000;
 
 async function gracefulCleanup(
   workerId: number,
@@ -213,16 +230,25 @@ async function gracefulCleanup(
 ): Promise<void> {
   const closeWithTimeout = async (label: string, closeFn: () => Promise<void>) => {
     const start = Date.now();
+    const timeoutId = setTimeout(
+      () => rejectClose(new Error(`${label} close timed out after ${CLEANUP_TIMEOUT_MS}ms`)),
+      CLEANUP_TIMEOUT_MS,
+    );
+    timeoutId.unref?.();
+
+    let rejectClose: (error: Error) => void = () => {};
     try {
       await Promise.race([
         closeFn(),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error(`${label} close timed out after ${CLEANUP_TIMEOUT_MS}ms`)), CLEANUP_TIMEOUT_MS),
-        ),
+        new Promise<never>((_, reject: (error: Error) => void) => {
+          rejectClose = reject;
+        }),
       ]);
       console.log(`[render] Worker ${workerId}: ${label} closed in ${Date.now() - start}ms`);
     } catch (err: any) {
       console.warn(`[render] Worker ${workerId}: ${label} close failed/timed out (${Date.now() - start}ms): ${err.message}`);
+    } finally {
+      clearTimeout(timeoutId);
     }
   };
 
@@ -285,7 +311,32 @@ export async function renderVideoOnPage(
     printProgress();
   }, 1000);
 
+  const workerStart = Date.now();
   const page = await browser.newPage();
+  page.setDefaultNavigationTimeout(PAGE_GOTO_TIMEOUT_MS);
+
+  let sawProgress = false;
+  let gotoFinished = false;
+  let viteCacheErrors: string[] = [];
+  const noProgressTimeout = setTimeout(() => {
+    if (!sawProgress) {
+      if (viteCacheErrors.length > 0) {
+        console.error(
+          `[render] Worker ${id}: ❌ VITE_CACHE_ERROR — No progress after ${NO_PROGRESS_TIMEOUT_MS}ms.\n` +
+            `  ${viteCacheErrors.length} Vite dependency chunk(s) failed to load:\n` +
+            viteCacheErrors.map(u => `    • ${u}`).join('\n') + '\n' +
+            `  This is likely a Vite dep-optimization cache race (multiple workers sharing node_modules/.vite).\n` +
+            `  Fix: stop all Vite/dev processes, then run:  rm -rf node_modules/.vite`,
+        );
+      } else {
+        console.warn(
+          `[render] Worker ${id}: no progress reported within ${NO_PROGRESS_TIMEOUT_MS}ms ` +
+            `(gotoFinished=${gotoFinished}, url=${url})`,
+        );
+      }
+    }
+  }, NO_PROGRESS_TIMEOUT_MS);
+
   if (!server.httpServer) {
     throw new Error('HTTP server is not initialized');
   }
@@ -312,7 +363,37 @@ export async function renderVideoOnPage(
     }
   });
 
+  page.on('pageerror', error => {
+    console.error(
+      `[render] Worker ${id}: pageerror: ${error.stack ?? error.message}`,
+    );
+  });
+
+  page.on('requestfailed', request => {
+    const url = request.url();
+    const errorText = request.failure()?.errorText ?? 'unknown';
+
+    if (url.includes('/.vite/deps/') || url.includes('/.vite/deps_temp/')) {
+      viteCacheErrors.push(url);
+      console.error(
+        `[render] Worker ${id}: requestfailed (vite-cache) ${request.method()} ${url} -> ${errorText}`,
+      );
+    } else {
+      console.warn(
+        `[render] Worker ${id}: requestfailed ${request.method()} ${url} -> ${errorText}`,
+      );
+    }
+  });
+
   page.exposeFunction('logProgress', (progress: number, elapsed: number = 0, eta: number = 0, currentFrame: number = 0, totalFrames: number = 0) => {
+    if (!sawProgress) {
+      sawProgress = true;
+      clearTimeout(noProgressTimeout);
+      console.log(
+        `[render] Worker ${id}: first progress after ${Date.now() - workerStart}ms ` +
+          `(progress=${(progress * 100).toFixed(1)}%, frame=${currentFrame}/${totalFrames})`,
+      );
+    }
     if (progressCallback) {
       progressCallback(id, progress);
     }
@@ -322,29 +403,85 @@ export async function renderVideoOnPage(
   });
 
   const renderingComplete = new Promise<void>((resolve, reject) => {
+    let settled = false;
+
+    const markSettled = () => {
+      if (settled) {
+        return false;
+      }
+      settled = true;
+      clearInterval(interval);
+      clearTimeout(noProgressTimeout);
+      return true;
+    };
+
     page.exposeFunction('onRenderComplete', async () => {
+      if (!markSettled()) {
+        return;
+      }
       console.log(`[render] Worker ${id}: onRenderComplete fired, closing browser & server...`);
       const closeStart = Date.now();
       await gracefulCleanup(id, browser, server);
       console.log(`[render] Worker ${id}: cleanup done in ${Date.now() - closeStart}ms`);
-      clearInterval(interval);
       resolve();
     });
 
     page.exposeFunction('onRenderFailed', async (errorMessage: string) => {
+      if (!markSettled()) {
+        return;
+      }
       console.error(`[render] Worker ${id}: onRenderFailed: ${errorMessage}`);
       await gracefulCleanup(id, browser, server);
-      clearInterval(interval);
       reject(new Error(errorMessage));
     });
 
     page.exposeFunction('browserError', (message: string) => {
+      if (!markSettled()) {
+        return;
+      }
       console.error(`[render] Worker ${id}: browserError: ${message}`);
       reject(new Error(message));
     });
+
+    page.on('error', async error => {
+      if (!markSettled()) {
+        return;
+      }
+      console.error(
+        `[render] Worker ${id}: page crashed/error event: ${error.stack ?? error.message}`,
+      );
+      await gracefulCleanup(id, browser, server);
+      reject(new Error(`Worker ${id} page crashed: ${error.message}`));
+    });
+
+    page.on('close', async () => {
+      if (!markSettled()) {
+        return;
+      }
+      console.error(
+        `[render] Worker ${id}: page closed unexpectedly before render completion ` +
+          `(gotoFinished=${gotoFinished}, sawProgress=${sawProgress})`,
+      );
+      await gracefulCleanup(id, browser, server);
+      reject(new Error(`Worker ${id} page closed unexpectedly before render completion`));
+    });
   });
 
-  await page.goto(url);
+  const gotoStart = Date.now();
+  console.log(`[render] Worker ${id}: page.goto start -> ${url}`);
+  try {
+    await page.goto(url, {waitUntil: 'load'});
+    gotoFinished = true;
+  } catch (error: any) {
+    clearInterval(interval);
+    clearTimeout(noProgressTimeout);
+    console.error(
+      `[render] Worker ${id}: page.goto failed after ${Date.now() - gotoStart}ms: ` +
+        `${error?.stack ?? error?.message ?? String(error)}`,
+    );
+    await gracefulCleanup(id, browser, server);
+    throw error;
+  }
 
   return renderingComplete;
 }
@@ -369,6 +506,7 @@ async function initializeBrowserAndStartRendering(
   const progressTracker = new Map<number, ProgressData>();
 
   const {browser, server, resolvedPort} = await initBrowserAndServer(
+    i,
     port,
     projectFile,
     outputFolderName,
@@ -610,15 +748,26 @@ export async function renderVideo({
     const timestamp = generateTimestamp();
     const timestampedFileName = `${outputFileName}-${timestamp}.${extensions[format]}`;
     const timestampedPath = path.join(outputFolderName, timestampedFileName);
+    const finalizeStart = Date.now();
+
+    console.log(
+      `[render] Finalizing output files ` +
+        `(latest=${finalOutputPath}, timestamped=${timestampedPath})`,
+    );
     
     // Rename the output file to include timestamp
+    const renameStart = Date.now();
     await fs.promises.rename(finalOutputPath, timestampedPath);
+    console.log(`[render] Timestamp rename done in ${Date.now() - renameStart}ms`);
     
     // Create a copy without timestamp as the "latest" version
+    const copyStart = Date.now();
     await fs.promises.copyFile(timestampedPath, finalOutputPath);
+    console.log(`[render] Latest copy done in ${Date.now() - copyStart}ms`);
     
     console.log(`Timestamped version saved to: ${timestampedPath}`);
     console.log(`Latest version saved to: ${finalOutputPath}`);
+    console.log(`[render] Finalization done in ${Date.now() - finalizeStart}ms`);
     
     return timestampedPath;
   }

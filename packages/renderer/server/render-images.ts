@@ -72,6 +72,8 @@ export async function renderImages({
   settings = {},
   variables,
 }: RenderImageParams): Promise<string[]> {
+  const workerId = 0;
+  const totalNumOfWorkers = 1;
   const timestampVersioning = settings.timestampVersioning ?? true;
   const outName = settings.outName ?? 'images';
   const baseOutputDir = path.resolve(settings.outDir ?? './output');
@@ -107,6 +109,7 @@ export async function renderImages({
   };
 
   const {browser, server, resolvedPort} = await initBrowserAndServer(
+    workerId,
     port,
     projectFile,
     outputDir,
@@ -119,8 +122,8 @@ export async function renderImages({
     true,
   );
 
-  const url = `http://localhost:${resolvedPort}/render?fileName=image&workerId=0&totalNumOfWorkers=1&hiddenFolderId=${encodeURIComponent(hiddenFolderId)}`;
-  await renderVideoOnPage(0, browser, server, url, new Map(), undefined, true);
+  const url = `http://localhost:${resolvedPort}/render?fileName=image&workerId=${workerId}&totalNumOfWorkers=${totalNumOfWorkers}&hiddenFolderId=${encodeURIComponent(hiddenFolderId)}`;
+  await renderVideoOnPage(workerId, browser, server, url, new Map(), undefined, true);
 
   // Create/update 'latest' folder if timestamp versioning is enabled
   if (timestampVersioning && timestampedDir) {

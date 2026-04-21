@@ -47,6 +47,35 @@ export class VideoFrameExtractor {
     {localPath: string; startTimeOffset: number}
   > = new Map();
 
+  private static normalizeVideoLookupKey(filePath: string): string | null {
+    try {
+      const url = new URL(filePath, 'http://localhost/');
+      return `${url.pathname}${url.search}`;
+    } catch {
+      return null;
+    }
+  }
+
+  private static getDownloadedVideoEntry(filePath: string) {
+    const direct = this.downloadedVideoMap.get(filePath);
+    if (direct) {
+      return direct;
+    }
+
+    const normalizedKey = this.normalizeVideoLookupKey(filePath);
+    if (!normalizedKey) {
+      return undefined;
+    }
+
+    for (const [storedKey, entry] of this.downloadedVideoMap.entries()) {
+      if (this.normalizeVideoLookupKey(storedKey) === normalizedKey) {
+        return entry;
+      }
+    }
+
+    return undefined;
+  }
+
   public constructor(
     filePath: string,
     startTime: number,
@@ -55,11 +84,16 @@ export class VideoFrameExtractor {
   ) {
     this.state = 'processing';
     this.filePath = filePath;
-    this.downloadedFilePath = VideoFrameExtractor.downloadedVideoMap.get(
-      filePath,
-    )?.localPath as string;
-    this.startTimeOffset = VideoFrameExtractor.downloadedVideoMap.get(filePath)
-      ?.startTimeOffset as number;
+    const downloadedVideo = VideoFrameExtractor.getDownloadedVideoEntry(filePath);
+    if (!downloadedVideo) {
+      throw new Error(
+        `No predownloaded video chunk found for "${filePath}". ` +
+          `This video was routed to the ffmpeg decoder during rendering, ` +
+          `but downloadVideos() did not prepare a server-side input first.`,
+      );
+    }
+    this.downloadedFilePath = downloadedVideo.localPath;
+    this.startTimeOffset = downloadedVideo.startTimeOffset;
 
     this.startTime = startTime;
     this.duration = duration;
@@ -102,13 +136,19 @@ export class VideoFrameExtractor {
     }
 
     return new Promise((resolve, reject) => {
+      ffmpeg.setFfprobePath(ffmpegSettings.getFfprobePath());
       ffmpeg.ffprobe(url, (err, metadata) => {
         if (err) {
           reject(err);
           return;
         }
 
-        const format = metadata.format.format_name?.split(',')[-1] || 'mp4';
+        const format =
+          metadata.format.format_name
+            ?.split(',')
+            .map(value => value.trim())
+            .filter(Boolean)
+            .pop() || 'mp4';
         const outputFileName = `chunk_${uuidv4()}.${format}`;
         const outputPath = path.join(outputDir, outputFileName);
         const toleranceInSeconds = 0.5;

@@ -201,11 +201,23 @@ export class Scene2D extends GeneratorScene<View2D> implements Inspectable {
   }
 
   public override getMediaAssets(): Array<AssetInfo> {
+    // Current scene time used to detect audios whose natural duration has
+    // already elapsed. Computed from playback frame to avoid relying on
+    // useThread() which is not available outside generator contexts.
+    const currentSceneTime = this.playback.frame / this.playback.fps;
+
+    // Exclude detached nodes (parent() === null). Such nodes were removed
+    // from the tree via remove() (e.g., user/engine cleanup of completed SFX)
+    // but remain in registeredNodes until dispose() is called. Without this
+    // check, completed audios that were detached can still be collected and
+    // re-emitted at the worker's start frame in range renders.
     const allAudios = Array.from(this.registeredNodes.values())
-      .filter((node): node is Audio => node instanceof Audio);
-    
+      .filter((node): node is Audio => node instanceof Audio)
+      .filter(audio => audio.parent() !== null);
+
     const playingVideos = Array.from(this.registeredNodes.values())
       .filter((node): node is Video => node instanceof Video)
+      .filter(video => video.parent() !== null)
       .filter(video => (video as Video).isPlaying());
 
     // Filter out audio that has finished playing
@@ -217,6 +229,17 @@ export class Scene2D extends GeneratorScene<View2D> implements Inspectable {
         
         // Looping audio should always be included
         if (audio.loop()) return true;
+
+        // Use absolute scene-time tracking to detect finished audio.
+        // Unlike currentTime/duration check, this is reliable even when
+        // the audio's internal time signal is bound to a thread that no
+        // longer ticks (e.g., SFX scheduled before a worker's frame range
+        // during a range render). Without this, such audios remain
+        // playing=true with currentTime stuck at 0, and would otherwise
+        // be re-emitted at the worker's start frame.
+        if ((audio as Audio).hasNaturallyFinished(currentSceneTime)) {
+          return false;
+        }
         
         const currentTime = audio.getCurrentTime();
         const duration = audio.getDuration();
@@ -254,9 +277,36 @@ export class Scene2D extends GeneratorScene<View2D> implements Inspectable {
 
     returnObjects.push(
       ...playingAudios.map(audio => {
-        const currentTime = audio.getCurrentTime();
+        let currentTime = audio.getCurrentTime();
         const duration = audio.getDuration();
         const isLooping = audio.loop();
+
+        // Recompute currentTime from absolute scene-time when the audio's
+        // internal time signal is unreliable (stuck at 0). This happens when
+        // the audio was started inside a thread that is no longer the active
+        // thread (common during range-render seek). Without this, looping
+        // audio (e.g., BGM) is reported with currentTime=0 at every frame
+        // and gets emitted from source offset 0 instead of its true position.
+        const playStartedAt = (audio as Audio).getPlayStartedAt();
+        if (
+          playStartedAt !== null &&
+          duration &&
+          duration > 0 &&
+          !isNaN(duration) &&
+          isFinite(duration)
+        ) {
+          const elapsed = currentSceneTime - playStartedAt;
+          if (elapsed > 0) {
+            const accurate = isLooping
+              ? elapsed % duration
+              : Math.min(elapsed, duration);
+            // Prefer the accurate value when the reported currentTime
+            // appears to be stuck (significantly behind elapsed).
+            if (currentTime < accurate - 0.05) {
+              currentTime = accurate;
+            }
+          }
+        }
         
         return {
           key: audio.key,

@@ -99,6 +99,12 @@ export abstract class Media extends Rect {
   > = {};
   protected lastTime = -1;
 
+  // Absolute scene time (seconds) when play() was last called.
+  // Used to detect when a non-looping audio has finished even if its
+  // internal time signal is unreliable (e.g., bound to a thread that no
+  // longer ticks during multi-worker render seek).
+  protected playStartedAtSeconds: number | null = null;
+
   public constructor(props: MediaProps) {
     super(props);
     if (!this.awaitCanPlay()) {
@@ -392,13 +398,48 @@ ${new Error().stack}
     const offset = this.time() || this.startTime();
     const playbackRate = this.playbackRate();
     this.playing(true);
+    this.playStartedAtSeconds = start;
     this.time(() => this.clampTime(offset + (time() - start) * playbackRate));
   }
 
   public pause() {
     this.playing(false);
+    this.playStartedAtSeconds = null;
     this.time.save();
     this.mediaElement().pause();
+  }
+
+  /**
+   * Returns true if this non-looping media's natural duration has elapsed
+   * since play() was called. Returns false for looping media, media that
+   * never started, or media whose duration is unknown.
+   *
+   * Uses the absolute scene time captured at play() rather than the
+   * Media's internal time signal, which can be unreliable when the
+   * binding thread no longer ticks (e.g., during range-render seek).
+   *
+   * @param currentSceneTime - Current scene time in seconds. Caller must
+   * provide this because hasNaturallyFinished() may be called outside any
+   * thread context (e.g., from the renderer collecting media assets).
+   */
+  public hasNaturallyFinished(currentSceneTime: number): boolean {
+    if (this.playStartedAtSeconds === null) return false;
+    if (this.loop()) return false;
+    const duration = this.getDuration();
+    if (!duration || duration <= 0 || isNaN(duration) || !isFinite(duration)) {
+      return false;
+    }
+    const elapsed = currentSceneTime - this.playStartedAtSeconds;
+    return elapsed >= duration;
+  }
+
+  /**
+   * Returns the absolute scene time (in seconds) at which play() was
+   * last called, or null if the media has never been played or has
+   * been paused.
+   */
+  public getPlayStartedAt(): number | null {
+    return this.playStartedAtSeconds;
   }
 
   public clampTime(time: number): number {

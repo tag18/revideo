@@ -6,8 +6,10 @@ import type {FfmpegSettings} from '@revideo/ffmpeg';
 import {
   audioCodecs,
   concatenateMedia,
+  createSilentAudioFile,
   doesFileExist,
   extensions,
+  getVideoDuration,
   mergeAudioWithVideo,
 } from '@revideo/ffmpeg';
 import {EventName, sendEvent} from '@revideo/telemetry';
@@ -542,26 +544,38 @@ async function collectAudioAndVideoFiles(
   hiddenFolderId: string,
   format: FfmpegExporterOptions['format'],
 ) {
-  const audioFiles = [];
-  const videoFiles = [];
+  const audioFiles: string[] = [];
+  const videoFiles: string[] = [];
+  const missingVideo = [];
   const missingAudio = [];
   for (let i = 0; i < numOfWorkers; i++) {
     const videoFilePath = `${os.tmpdir()}/revideo-${outputFileName}-${i}-${hiddenFolderId}/visuals.${extensions[format]}`;
     const audioFilePath = `${os.tmpdir()}/revideo-${outputFileName}-${i}-${hiddenFolderId}/audio.wav`;
 
+    if (!(await doesFileExist(videoFilePath))) {
+      missingVideo.push({worker: i, path: videoFilePath});
+    }
     if (!(await doesFileExist(audioFilePath))) {
-      missingAudio.push({worker: i, path: audioFilePath});
+      missingAudio.push({worker: i, videoPath: videoFilePath, audioPath: audioFilePath});
     }
     videoFiles.push(videoFilePath);
     audioFiles.push(audioFilePath);
   }
 
-  if (missingAudio.length > 0) {
-    const details = missingAudio.map(m => `  Worker ${m.worker}: ${m.path}`).join('\n');
+  if (missingVideo.length > 0) {
+    const details = missingVideo.map(m => `  Worker ${m.worker}: ${m.path}`).join('\n');
     throw new Error(
-      `Audio generation failed: audio.wav not found for ${missingAudio.length} worker(s).\n` +
-      `This usually means ffmpeg failed during audio processing. Check the logs above for errors.\n${details}`
+      `Video generation failed: visuals.${extensions[format]} not found for ${missingVideo.length} worker(s).\n` +
+      `Check the logs above for renderer or ffmpeg errors.\n${details}`,
     );
+  }
+
+  for (const missing of missingAudio) {
+    const duration = await getVideoDuration(missing.videoPath);
+    console.log(
+      `[render] Worker ${missing.worker}: no audio.wav found; creating ${duration.toFixed(3)}s silent audio track`,
+    );
+    await createSilentAudioFile(missing.audioPath, duration);
   }
 
   return {audioFiles, videoFiles};
@@ -806,12 +820,20 @@ export const renderPartialVideo = async ({
   const videoFilePath = `${os.tmpdir()}/revideo-${outputFileName}-${workerId}-${hiddenFolderId}/visuals.${extensions[format]}`;
   const audioFilePath = `${os.tmpdir()}/revideo-${outputFileName}-${workerId}-${hiddenFolderId}/audio.wav`;
 
-  if (!(await doesFileExist(audioFilePath))) {
+  if (!(await doesFileExist(videoFilePath))) {
     throw new Error(
-      `Audio generation failed: audio.wav not found for worker ${workerId}.\n` +
-      `Expected path: ${audioFilePath}\n` +
-      `This usually means ffmpeg failed during audio processing. Check the logs above for errors.`
+      `Video generation failed: visuals.${extensions[format]} not found for worker ${workerId}.\n` +
+      `Expected path: ${videoFilePath}\n` +
+      `Check the logs above for renderer or ffmpeg errors.`,
     );
+  }
+
+  if (!(await doesFileExist(audioFilePath))) {
+    const duration = await getVideoDuration(videoFilePath);
+    console.log(
+      `[render] Worker ${workerId}: no audio.wav found; creating ${duration.toFixed(3)}s silent audio track`,
+    );
+    await createSilentAudioFile(audioFilePath, duration);
   }
 
   return {audioFile: audioFilePath, videoFile: videoFilePath};

@@ -146,6 +146,11 @@ If you want to disable telemetry, just set the following environment variable:
 DISABLE_TELEMETRY=true
 ```
 
+Telemetry shutdown is registered once with `beforeExit`: an asynchronous
+network failure must not repeatedly prevent an otherwise completed render
+from exiting. A single shutdown attempt may still incur a network timeout;
+set `DISABLE_TELEMETRY=true` for comparisons that should exclude telemetry.
+
 ## Learn More
 
 To learn more about Revideo, feel free to check out our

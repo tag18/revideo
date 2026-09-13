@@ -7,7 +7,9 @@ const Client = new PostHog('phc_YpKoFD7smPe4SXRtVyMW766uP9AjUwnuRJ8hh2EJcVv', {
   host: 'https://eu.posthog.com',
 });
 
-process.on('beforeExit', async () => {
+// Async shutdown can schedule network work and trigger beforeExit again.
+// Flush only once so failed telemetry cannot keep a completed render alive.
+process.once('beforeExit', async () => {
   await Client.shutdown();
 });
 

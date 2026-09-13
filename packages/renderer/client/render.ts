@@ -26,12 +26,20 @@ export const render = async (
   try {
     const renderer = new Renderer(project);
 
+    const renderSettingsFromProject = getFullRenderingSettings(project);
+
+    // Frame rate override must be applied before any frame/time conversion so
+    // that worker frame ranges are computed on the same frame grid the render
+    // loop will use.
+    const fps = overwriteRenderSettings.fps ?? renderSettingsFromProject.fps;
+    renderer.setFps(fps);
+
     // Range calculation
     const range =
       overwriteRenderSettings.range ?? project.settings.shared.range;
 
     const {firstGlobalFrame, lastGlobalFrame} =
-      await getGlobalFirstAndLastFrame(project, renderer, range[0], range[1]);
+      await getGlobalFirstAndLastFrame(project, renderer, range[0], range[1], fps);
 
     const {firstWorkerFrame, lastWorkerFrame} =
       await getWorkerFirstAndLastFrame(
@@ -40,8 +48,6 @@ export const render = async (
         workerId,
         totalNumOfWorkers,
       );
-
-    const renderSettingsFromProject = getFullRenderingSettings(project);
 
     // Overwrite settings with user provided settings
     let background = renderSettingsFromProject.background;
@@ -57,6 +63,12 @@ export const render = async (
       );
     }
 
+    // Scales the rendered canvas without changing the layout coordinate
+    // system — used for fast low-resolution preview renders.
+    const resolutionScale =
+      overwriteRenderSettings.resolutionScale ??
+      renderSettingsFromProject.resolutionScale;
+
     // Combine settings
     const combinedSettings = {
       ...renderSettingsFromProject,
@@ -65,6 +77,8 @@ export const render = async (
       ...overwriteRenderSettings,
       background,
       size,
+      fps,
+      resolutionScale,
       range: [
         renderer.frameToTime(firstWorkerFrame),
         renderer.frameToTime(lastWorkerFrame),
@@ -100,6 +114,7 @@ async function getGlobalFirstAndLastFrame(
   renderer: Renderer,
   startSecondFromUser: number,
   endSecondFromUser: number,
+  fps: number,
 ) {
   const firstGlobalFrame = renderer.timeToFrame(startSecondFromUser);
   let lastGlobalFrame: number;
@@ -112,6 +127,7 @@ async function getGlobalFirstAndLastFrame(
     const settings = {
       ...getFullRenderingSettings(project),
       name: project.name,
+      fps,
     };
     lastGlobalFrame = await renderer.getNumberOfFrames(settings);
   }

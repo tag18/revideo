@@ -132,6 +132,46 @@ Concretely, some of the differences to Motion Canvas are the following ones:
 
 <br/>
 
+## Lower-resolution headless renders (this fork)
+
+The renderer accepts typed `settings.projectSettings.resolutionScale` and `fps`
+overrides. To render a draft without changing the project's layout coordinates
+or frame rate:
+
+```typescript
+import {renderVideo} from '@revideo/renderer';
+
+await renderVideo({
+  projectFile: './src/project.tsx',
+  settings: {
+    outDir: './output/previews',
+    outFile: 'preview.mp4',
+    workers: 2,
+    projectSettings: {
+      range: [0, 20],
+      resolutionScale: 0.5,
+    },
+  },
+});
+```
+
+A 1920x1080 project produces 960x540 pixels while retaining its logical size.
+Omitting `resolutionScale` preserves the project setting. The example leaves
+`fps` unchanged; explicit fps overrides are applied before frame-range and
+worker-slice calculations. Execution variables are merged over project defaults
+instead of replacing the entire variable object.
+The Wasm encoder also uses the scaled canvas pixel dimensions and effective fps,
+so its video timing matches audio generation when overrides are supplied.
+
+These are renderer primitives, not a universal `--preview` flag.
+The companion **videolib** repository implements `npm run render -- <product> --preview`,
+separate draft output paths, and MapLibre terrain degradation in its own
+`spec/RenderGuide.md`. Lowering the final canvas scale alone does not reduce a
+custom map's internal canvas or disable its DEM layers.
+
+After changing framework packages, run `npm run build` here before building
+the consuming videolib project, so runtime code and declarations stay in sync.
+
 ## Telemetry
 
 To understand how people use Revideo, we **anonymously** track how many videos

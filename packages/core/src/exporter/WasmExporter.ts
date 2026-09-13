@@ -19,7 +19,7 @@ export class WasmExporter implements Exporter {
   }
 
   public constructor(
-    private readonly project: Project,
+    _project: Project,
     private readonly settings: RendererSettings,
   ) {}
 
@@ -31,10 +31,11 @@ export class WasmExporter implements Exporter {
       wasmBinary: buffer,
     });
 
+    const size = this.settings.size.scale(this.settings.resolutionScale);
     this.encoder = mp4.createWebCodecsEncoder({
-      width: this.settings.size.x,
-      height: this.settings.size.y,
-      fps: this.project.settings.rendering.fps,
+      width: Math.floor(size.x),
+      height: Math.floor(size.y),
+      fps: this.settings.fps,
     });
   }
 

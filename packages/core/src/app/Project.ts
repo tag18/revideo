@@ -83,6 +83,15 @@ export type RenderVideoUserProjectSettings = {
   size?: UserProjectSettings['shared']['size'];
 
   exporter?: UserProjectSettings['rendering']['exporter'];
+  fps?: UserProjectSettings['rendering']['fps'];
+
+  /**
+   * Scales the rendered canvas relative to `size` without changing the
+   * project's layout coordinate system. Use values below 1 to render
+   * lower-resolution previews (e.g. 0.5 renders a 1920x1080 project at
+   * 960x540 while every layout coordinate stays unchanged).
+   */
+  resolutionScale?: UserProjectSettings['rendering']['resolutionScale'];
 };
 
 /**

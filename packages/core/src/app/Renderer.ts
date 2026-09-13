@@ -124,6 +124,7 @@ export class Renderer {
     this.estimator.reset();
     this.state.current = RendererState.Working;
 
+    this.playback.fps = settings.fps;
     await this.reloadScenes(settings);
     await this.playback.recalculate();
     await this.playback.reset();
@@ -143,6 +144,18 @@ export class Renderer {
 
   public timeToFrame(second: number) {
     return this.status.secondsToFrames(second);
+  }
+
+  /**
+   * Set the frame rate used by {@link frameToTime} and {@link timeToFrame}.
+   *
+   * Must be called before any frame/time conversion when the render settings
+   * override the project's frame rate — otherwise worker frame ranges would be
+   * computed on the project's frame grid while the render loop runs on the
+   * overridden one.
+   */
+  public setFps(fps: number) {
+    this.playback.fps = fps;
   }
 
   /**
